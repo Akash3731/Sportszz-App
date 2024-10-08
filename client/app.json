@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "scheme": "sportszz",
+    "android": {
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "sportszz",
+              "host": "*"
+            },
+            {
+              "scheme": "https",
+              "host": "sportszz.com"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "package": "com.akash5356.client"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "client",
+  "version": "1.0.0",
+  "main": "expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.0.0",
+    "@react-native-picker/picker": "^2.8.1",
+    "@react-navigation/native": "^6.1.18",
+    "@react-navigation/stack": "^6.4.1",
+    "axios": "^1.7.7",
+    "expo": "~51.0.35",
+    "expo-linear-gradient": "~13.0.2",
+    "expo-linking": "~6.3.1",
+    "expo-status-bar": "~1.12.1",
+    "react": "18.2.0",
+    "react-native": "0.74.5",
+    "react-native-collapsible": "^1.6.2",
+    "react-native-paper": "^5.12.5",
+    "react-native-picker-select": "^9.3.1",
+    "react-native-toast-message": "^2.2.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0"
+  },
+  "private": true
+}
