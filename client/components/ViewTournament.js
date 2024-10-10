@@ -541,27 +541,43 @@ const ViewTournament = () => {
   };
 
   const handleMatchCompletion = (winningTeam, losingTeam) => {
+    console.log("Match Completion Handler Called:");
+    console.log("Winning Team:", winningTeam);
+    console.log("Losing Team:", losingTeam);
+
     if (tournamentType === "Round Robin") {
       updateRoundRobinResults(winningTeam, losingTeam);
     } else if (tournamentType === "Single Elimination") {
       handleSingleEliminationProgress(winningTeam);
     }
 
-    // Add winner to the winners array
-    setWinners((prev) => [...prev, winningTeam]);
+    // Add winner to the winners array (store as a string)
+    setWinners((prev) => {
+      const updatedWinners = [...prev, winningTeam.name]; // Store only the name
+      console.log("Updated Winners Array:", updatedWinners);
+      return updatedWinners;
+    });
 
     // Add to match history
-    setMatchHistory((prev) => [
-      ...prev,
-      {
-        teamA: selectedMatch.teamA,
-        teamB: selectedMatch.teamB,
-        winner: winningTeam.name,
-      },
-    ]);
+    setMatchHistory((prev) => {
+      const newMatchHistory = [
+        ...prev,
+        {
+          teamA: selectedMatch.teamA,
+          teamB: selectedMatch.teamB,
+          winner: winningTeam.name,
+        },
+      ];
+      console.log("Updated Match History:", newMatchHistory);
+      return newMatchHistory;
+    });
 
     // Progress to next match
-    setCurrentMatch((prev) => prev + 1);
+    setCurrentMatch((prev) => {
+      const nextMatch = prev + 1;
+      console.log("Current Match Progressed to:", nextMatch);
+      return nextMatch;
+    });
 
     // Check if current round is complete
     checkRoundCompletion();
@@ -688,6 +704,14 @@ const ViewTournament = () => {
     );
   };
 
+  const renderWinners = () => {
+    return winners.map((winner, index) => (
+      <Text key={index} style={styles.winnerText}>
+        {winner}
+      </Text>
+    ));
+  };
+
   const renderGroup = ({ item }) => (
     <TouchableOpacity
       style={styles.groupContainer}
@@ -733,15 +757,15 @@ const ViewTournament = () => {
   const renderMatchHistory = () => {
     return matchHistory.map((match, index) => (
       <View key={index} style={styles.historyItem}>
-        <Text style={styles.historyText}>
+        <Text>
           {match.teamA} vs {match.teamB} - Winner: {match.winner}
         </Text>
       </View>
     ));
   };
 
+  // Close match modal and determine winning/losing teams
   const closeMatchModal = () => {
-    // Determine the winning team based on the scores
     const winningTeam =
       scoreTeamA > scoreTeamB
         ? { name: selectedMatch.teamA }
@@ -751,10 +775,11 @@ const ViewTournament = () => {
         ? { name: selectedMatch.teamB }
         : { name: selectedMatch.teamA };
 
-    // Call handleMatchCompletion to finalize the match
-    handleMatchCompletion(winningTeam, losingTeam);
+    console.log("Closing match modal:");
+    console.log("Winning Team:", winningTeam);
+    console.log("Losing Team:", losingTeam);
 
-    // Close the modal
+    handleMatchCompletion(winningTeam, losingTeam);
     setModalVisible(false);
   };
 
@@ -835,18 +860,7 @@ const ViewTournament = () => {
                 {renderTournamentProgress()}
 
                 {/* Display Winners Section */}
-                <View style={styles.winnerSection}>
-                  <Text style={styles.title}>Winners:</Text>
-                  {winners.length > 0 ? (
-                    winners.map((winner, index) => (
-                      <Text key={index} style={styles.winnerText}>
-                        {winner}
-                      </Text>
-                    ))
-                  ) : (
-                    <Text>No winners yet</Text>
-                  )}
-                </View>
+                {renderWinners()}
               </View>
             </>
           )}
@@ -925,7 +939,6 @@ const ViewTournament = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Display Match History in the Modal */}
             <View style={styles.historySection}>
               <Text style={styles.historyTitle}>Match History:</Text>
               <ScrollView style={styles.historyContainer}>
@@ -933,19 +946,8 @@ const ViewTournament = () => {
               </ScrollView>
             </View>
 
-            {/* Display Winners in the Modal if needed */}
-            <View style={styles.winnerSection}>
-              <Text style={styles.title}>Winners:</Text>
-              {winners.length > 0 ? (
-                winners.map((winner, index) => (
-                  <Text key={index} style={styles.winnerText}>
-                    {winner}
-                  </Text>
-                ))
-              ) : (
-                <Text>No winners yet</Text>
-              )}
-            </View>
+            {/* Render Winners in the Modal */}
+            {renderWinners()}
           </View>
         </View>
       </Modal>
