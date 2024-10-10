@@ -21,6 +21,7 @@ const ViewTournament = () => {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [isMatchHistoryVisible, setMatchHistoryVisible] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [scoreTeamA, setScoreTeamA] = useState(0);
   const [scoreTeamB, setScoreTeamB] = useState(0);
@@ -505,6 +506,10 @@ const ViewTournament = () => {
     }
   };
 
+  const closeMatchModal = () => {
+    setModalVisible(false);
+  };
+
   // Add tournament progress indicators to the UI
   const renderTournamentProgress = () => (
     <View style={styles.progressContainer}>
@@ -541,10 +546,6 @@ const ViewTournament = () => {
   };
 
   const handleMatchCompletion = (winningTeam, losingTeam) => {
-    console.log("Match Completion Handler Called:");
-    console.log("Winning Team:", winningTeam);
-    console.log("Losing Team:", losingTeam);
-
     if (tournamentType === "Round Robin") {
       updateRoundRobinResults(winningTeam, losingTeam);
     } else if (tournamentType === "Single Elimination") {
@@ -565,7 +566,14 @@ const ViewTournament = () => {
         {
           teamA: selectedMatch.teamA,
           teamB: selectedMatch.teamB,
-          winner: winningTeam.name,
+          sets: [
+            // Initialize sets as an array
+            {
+              scoreA: scoreTeamA,
+              scoreB: scoreTeamB,
+              winner: winningTeam.name,
+            },
+          ],
         },
       ];
       console.log("Updated Match History:", newMatchHistory);
@@ -573,11 +581,7 @@ const ViewTournament = () => {
     });
 
     // Progress to next match
-    setCurrentMatch((prev) => {
-      const nextMatch = prev + 1;
-      console.log("Current Match Progressed to:", nextMatch);
-      return nextMatch;
-    });
+    setCurrentMatch((prev) => prev + 1);
 
     // Check if current round is complete
     checkRoundCompletion();
@@ -653,7 +657,6 @@ const ViewTournament = () => {
         : Math.floor(teams.length / Math.pow(2, currentRound - 1));
 
     if (currentMatch > matchesPerRound) {
-      // Round is complete
       setCurrentRound((prev) => prev + 1);
       setCurrentMatch(1);
 
@@ -740,7 +743,6 @@ const ViewTournament = () => {
     </View>
   );
 
-  // Function to render SVG Bracket based on the match type
   const renderBracket = () => {
     switch (tournamentType) {
       case "Single Elimination":
@@ -754,35 +756,86 @@ const ViewTournament = () => {
     }
   };
 
+  const openMatchHistoryModal = (match) => {
+    setSelectedMatch(match); // Set the selected match data
+    setMatchHistoryVisible(true); // Open the modal
+  };
+
   const renderMatchHistory = () => {
-    return matchHistory.map((match, index) => (
-      <View key={index} style={styles.historyItem}>
-        <Text>
-          {match.teamA} vs {match.teamB} - Winner: {match.winner}
-        </Text>
+    if (!selectedMatch) return null; // Ensure there's a selected match
+
+    return (
+      <View style={matchHistoryStyles.matchHistoryContainer}>
+        <View style={matchHistoryStyles.matchDetailRow}>
+          <Text style={matchHistoryStyles.matchDetailLabel}>Match:</Text>
+          <Text style={matchHistoryStyles.matchDetailValue}>
+            {selectedMatch.teamA} vs {selectedMatch.teamB}
+          </Text>
+        </View>
+        <View style={matchHistoryStyles.matchDetailRow}>
+          <Text style={matchHistoryStyles.matchDetailLabel}>Match Type:</Text>
+          <Text style={matchHistoryStyles.matchDetailValue}>
+            {selectedMatch.matchType}
+          </Text>
+        </View>
+
+        {/* Display individual sets */}
+        {selectedMatch.sets && selectedMatch.sets.length > 0 ? (
+          selectedMatch.sets.map((set, setIndex) => (
+            <View key={setIndex} style={matchHistoryStyles.setDetailRow}>
+              <Text style={matchHistoryStyles.setDetailText}>
+                Set {setIndex + 1}: {set.scoreA} - {set.scoreB} | Winner:{" "}
+                {set.winner}
+              </Text>
+            </View>
+          ))
+        ) : (
+          <Text style={matchHistoryStyles.noSetsText}>
+            No sets recorded for this match.
+          </Text>
+        )}
+
+        <View style={matchHistoryStyles.matchDetailRow}>
+          <Text style={matchHistoryStyles.matchDetailLabel}>Winner:</Text>
+          <Text style={matchHistoryStyles.matchDetailValue}>
+            {selectedMatch.winner}
+          </Text>
+        </View>
+        <View style={matchHistoryStyles.matchDetailRow}>
+          <Text style={matchHistoryStyles.matchDetailLabel}>Loser:</Text>
+          <Text style={matchHistoryStyles.matchDetailValue}>
+            {selectedMatch.winner === selectedMatch.teamA
+              ? selectedMatch.teamB
+              : selectedMatch.teamA}
+          </Text>
+        </View>
       </View>
-    ));
+    );
   };
 
-  // Close match modal and determine winning/losing teams
-  const closeMatchModal = () => {
-    const winningTeam =
-      scoreTeamA > scoreTeamB
-        ? { name: selectedMatch.teamA }
-        : { name: selectedMatch.teamB };
-    const losingTeam =
-      scoreTeamA > scoreTeamB
-        ? { name: selectedMatch.teamB }
-        : { name: selectedMatch.teamA };
+  const renderMatchHistoryModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={isMatchHistoryVisible}
+      onRequestClose={() => setMatchHistoryVisible(false)}
+    >
+      <View style={matchHistoryStyles.modalOverlay}>
+        <View style={matchHistoryStyles.modalContent}>
+          <Text style={matchHistoryStyles.modalTitle}>Match History</Text>
+          <ScrollView>{renderMatchHistory()}</ScrollView>
+          <TouchableOpacity
+            style={matchHistoryStyles.closeButton}
+            onPress={() => setMatchHistoryVisible(false)}
+          >
+            <Text style={matchHistoryStyles.closeButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
 
-    console.log("Closing match modal:");
-    console.log("Winning Team:", winningTeam);
-    console.log("Losing Team:", losingTeam);
-
-    handleMatchCompletion(winningTeam, losingTeam);
-    setModalVisible(false);
-  };
-
+  // Render function
   return (
     <View style={styles.container}>
       {loading ? (
@@ -856,16 +909,24 @@ const ViewTournament = () => {
                 >
                   <Text style={styles.startButtonText}>Start Match</Text>
                 </TouchableOpacity>
-                {/* Add tournament progress section */}
-                {renderTournamentProgress()}
 
-                {/* Display Winners Section */}
-                {renderWinners()}
+                <View style={styles.container}>
+                  <TouchableOpacity
+                    style={styles.historyButton}
+                    onPress={() => openMatchHistoryModal(selectedMatch)}
+                  >
+                    <Text style={styles.historyButtonText}>
+                      Show Match History
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </>
           )}
         </ScrollView>
       )}
+
+      {renderMatchHistoryModal()}
 
       <Modal
         animationType="slide"
@@ -881,16 +942,6 @@ const ViewTournament = () => {
             <Text style={styles.modalSubtitle}>
               {matchType === "Singles" ? "Best of 7" : "Team Match"}
             </Text>
-
-            {matchType === "Team" && (
-              <View style={styles.matchTypeIndicator}>
-                <Text style={styles.matchTypeText}>
-                  Match {currentMatch}/5 (
-                  {currentMatch <= 4 ? "Singles" : "Doubles"})
-                </Text>
-              </View>
-            )}
-
             <View style={styles.scoreContainer}>
               <View style={styles.scoreInput}>
                 <Text style={styles.scoreText}>{scoreTeamA}</Text>
@@ -922,7 +973,6 @@ const ViewTournament = () => {
                 </Text>
               </View>
             </View>
-
             <View style={styles.matchControls}>
               <TouchableOpacity
                 style={styles.endSetButton}
@@ -938,15 +988,6 @@ const ViewTournament = () => {
                 <Text style={styles.closeButtonText}>Close Match</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={styles.historySection}>
-              <Text style={styles.historyTitle}>Match History:</Text>
-              <ScrollView style={styles.historyContainer}>
-                {renderMatchHistory()}
-              </ScrollView>
-            </View>
-
-            {/* Render Winners in the Modal */}
             {renderWinners()}
           </View>
         </View>
@@ -954,6 +995,74 @@ const ViewTournament = () => {
     </View>
   );
 };
+
+const matchHistoryStyles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)", // Semi-transparent background
+  },
+  modalContent: {
+    width: "90%",
+    backgroundColor: "white",
+    borderRadius: 10,
+    padding: 20,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  matchHistoryContainer: {
+    marginBottom: 15,
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ccc",
+  },
+  matchDetailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginVertical: 5,
+  },
+  matchDetailLabel: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "bold",
+    padding: 5,
+  },
+  matchDetailValue: {
+    flex: 1,
+    fontSize: 16,
+    padding: 5,
+  },
+  setDetailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginVertical: 5,
+  },
+  setDetailText: {
+    fontSize: 14,
+    color: "#555",
+    marginTop: 5,
+  },
+  noSetsText: {
+    fontStyle: "italic",
+    color: "#999",
+  },
+  closeButton: {
+    backgroundColor: "#007BFF",
+    borderRadius: 5,
+    padding: 10,
+    marginTop: 10,
+  },
+  closeButtonText: {
+    color: "white",
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+});
 
 const additionalStyles = StyleSheet.create({
   progressContainer: {
@@ -983,6 +1092,7 @@ const additionalStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   ...additionalStyles,
+  ...matchHistoryStyles,
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
@@ -1199,6 +1309,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f9fa",
     borderRadius: 8,
     marginBottom: 8,
+  },
+  historyButton: {
+    backgroundColor: "#007BFF",
+    padding: 10,
+    borderRadius: 5,
+    marginTop: 10,
+  },
+  historyButtonText: {
+    color: "white",
+    textAlign: "center",
+  },
+  setDetails: {
+    fontSize: 14,
+    marginLeft: 10,
   },
 });
 
