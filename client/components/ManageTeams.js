@@ -174,6 +174,17 @@ const ManageTeams = () => {
 
   const addTeam = async (groupId) => {
     const teamName = teamNames[groupId]; // Get the team name for the specific group
+    const group = groups.find((g) => g._id === groupId);
+
+    // Check if maximum teams are reached
+    if (group.teams.length >= 4) {
+      Alert.alert(
+        "Limit Reached",
+        "Cannot add more teams. A maximum of 4 teams are allowed."
+      );
+      return;
+    }
+
     if (!teamName || !teamName.trim()) {
       Alert.alert("Error", "Please enter a team name");
       return;
@@ -193,7 +204,7 @@ const ManageTeams = () => {
         )
       );
 
-      setTeamNames((prev) => ({ ...prev, [groupId]: "" })); // Clear the team name input after adding
+      setTeamNames((prev) => ({ ...prev, [groupId]: "" }));
       Alert.alert("Success", "Team added successfully");
     } catch (error) {
       console.error("Error adding team:", error);
@@ -282,8 +293,25 @@ const ManageTeams = () => {
     const playerName = playerNames[teamId]; // Get the player name for the specific team
     const position = positions[teamId]; // Get the position for the specific team
 
+    // Validate input
     if (!playerName.trim() || !position) {
       Alert.alert("Error", "Please enter player name and select position");
+      return;
+    }
+
+    // Check total players and team player limits
+    const team = groups
+      .find((group) => group._id === groupId)
+      .teams.find((team) => team._id === teamId);
+    if (totalPlayers >= 64) {
+      Alert.alert(
+        "Limit Reached",
+        "Cannot add more players. The tournament allows a maximum of 64 players."
+      );
+      return;
+    }
+    if (team.players.length >= 4) {
+      Alert.alert("Limit Reached", "This team already has 4 players.");
       return;
     }
 
@@ -292,6 +320,7 @@ const ManageTeams = () => {
         `${config.backendUrl}/managers/${managerId}/groups/${groupId}/teams/${teamId}/players`,
         { name: playerName.trim(), position }
       );
+
       setGroups((prevGroups) =>
         prevGroups.map((group) =>
           group._id === groupId
@@ -308,6 +337,7 @@ const ManageTeams = () => {
       );
       setPlayerNames((prev) => ({ ...prev, [teamId]: "" })); // Clear input after adding
       setPositions((prev) => ({ ...prev, [teamId]: null })); // Reset position after adding
+      setTotalPlayers((prev) => prev + 1); // Increment total players count
       Alert.alert("Success", "Player added successfully");
     } catch (error) {
       console.error("Error adding player:", error);

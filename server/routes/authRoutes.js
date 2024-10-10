@@ -558,6 +558,25 @@ router.post(
         return res.status(404).json({ message: "Team not found" });
       }
 
+      // Check the total number of players in all teams
+      const totalPlayers = manager.groups.reduce((total, group) => {
+        return (
+          total +
+          group.teams.reduce((teamTotal, team) => {
+            return teamTotal + team.players.length;
+          }, 0)
+        );
+      }, 0);
+
+      if (totalPlayers >= 64) {
+        return res
+          .status(400)
+          .json({
+            message:
+              "Cannot add more players. The tournament allows a maximum of 64 players.",
+          });
+      }
+
       const player = new Player({ name, position });
       team.players.push(player);
       await manager.save();

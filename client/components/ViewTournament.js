@@ -12,9 +12,9 @@ import {
 } from "react-native";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import config from "./config"; // Adjust the path according to your project structure
-import { Svg, Line, Text as SvgText, G, Rect } from "react-native-svg"; // Import SVG components
-import { Picker } from "@react-native-picker/picker"; // Make sure to import Picker
+import config from "./config";
+import { Svg, Line, Text as SvgText, G, Rect } from "react-native-svg";
+import { Picker } from "@react-native-picker/picker";
 
 const ViewTournament = () => {
   const [managerId, setManagerId] = useState(null);
@@ -27,10 +27,10 @@ const ViewTournament = () => {
   const [teams, setTeams] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [setCount, setSetCount] = useState(1);
-  const [setScoreA, setSetScoreA] = useState([0, 0, 0, 0, 0]); // Max 5 sets
+  const [setScoreA, setSetScoreA] = useState([0, 0, 0, 0, 0]);
   const [setScoreB, setSetScoreB] = useState([0, 0, 0, 0, 0]);
-  const [winners, setWinners] = useState([]); // Array to store winners of each match
-  const [matchHistory, setMatchHistory] = useState([]); // Array to store match history
+  const [winners, setWinners] = useState([]);
+  const [matchHistory, setMatchHistory] = useState([]);
   const [matchType, setMatchType] = useState("Singles");
   const [tournamentType, setTournamentType] = useState("Single Elimination");
   const [roundRobinResults, setRoundRobinResults] = useState({});
@@ -206,32 +206,117 @@ const ViewTournament = () => {
     const svgHeight = Math.max(400, brackets[0]?.length * 100);
     const roundWidth = 150;
 
+    // Define colors for different match states
+    const matchColors = {
+      pending: "#f8f9fa",
+      inProgress: "#fff3cd",
+      completed: "#d1e7dd",
+      bye: "#e9ecef",
+    };
+
+    // Helper function to determine match status
+    const getMatchStatus = (match) => {
+      if (match.teamA === "BYE" || match.teamB === "BYE") return "bye";
+      if (match.winner) return "completed";
+      if (
+        selectedMatch?.teamA === match.teamA &&
+        selectedMatch?.teamB === match.teamB
+      )
+        return "inProgress";
+      return "pending";
+    };
+
     return (
       <ScrollView horizontal>
         <ScrollView>
           <Svg height={svgHeight} width={brackets.length * roundWidth + 50}>
             {brackets.map((round, roundIndex) => (
               <G key={`round-${roundIndex}`}>
+                {/* Add round label */}
+                <SvgText
+                  x={roundIndex * roundWidth + 40}
+                  y={20}
+                  fontSize={14}
+                  fontWeight="bold"
+                  fill="#666666"
+                >
+                  Round {roundIndex + 1}
+                </SvgText>
+
                 {round.map((match, matchIndex) => {
                   const yPos =
                     (svgHeight / (round.length + 1)) * (matchIndex + 1);
+                  const matchStatus = getMatchStatus(match);
+
                   return (
                     <G key={`match-${roundIndex}-${matchIndex}`}>
+                      {/* Match box with dynamic color based on status */}
                       <Rect
                         x={roundIndex * roundWidth + 10}
-                        y={yPos - 15}
+                        y={yPos - 20}
                         width={120}
-                        height={30}
-                        fill="white"
-                        stroke="black"
+                        height={40}
+                        fill={matchColors[matchStatus]}
+                        stroke={
+                          matchStatus === "inProgress" ? "#ffc107" : "#dee2e6"
+                        }
+                        strokeWidth={matchStatus === "inProgress" ? "2" : "1"}
+                        rx={4}
                       />
+
+                      {/* Team A name */}
                       <SvgText
                         x={roundIndex * roundWidth + 15}
-                        y={yPos + 5}
+                        y={yPos - 5}
                         fontSize={12}
+                        fill={
+                          match.winner === match.teamA ? "#28a745" : "#212529"
+                        }
+                        fontWeight={
+                          match.winner === match.teamA ? "bold" : "normal"
+                        }
                       >
-                        {match.teamA} vs {match.teamB}
+                        {match.teamA}
                       </SvgText>
+
+                      {/* Divider line */}
+                      <Line
+                        x1={roundIndex * roundWidth + 15}
+                        y1={yPos}
+                        x2={roundIndex * roundWidth + 125}
+                        y2={yPos}
+                        stroke="#dee2e6"
+                        strokeWidth="1"
+                      />
+
+                      {/* Team B name */}
+                      <SvgText
+                        x={roundIndex * roundWidth + 15}
+                        y={yPos + 15}
+                        fontSize={12}
+                        fill={
+                          match.winner === match.teamB ? "#28a745" : "#212529"
+                        }
+                        fontWeight={
+                          match.winner === match.teamB ? "bold" : "normal"
+                        }
+                      >
+                        {match.teamB}
+                      </SvgText>
+
+                      {/* Winner indicator */}
+                      {match.winner && (
+                        <Rect
+                          x={roundIndex * roundWidth + 120}
+                          y={yPos - 10}
+                          width={8}
+                          height={20}
+                          fill="#28a745"
+                          rx={2}
+                        />
+                      )}
+
+                      {/* Connection lines to next round */}
                       {roundIndex < brackets.length - 1 && (
                         <Line
                           x1={roundIndex * roundWidth + 130}
@@ -242,8 +327,8 @@ const ViewTournament = () => {
                               (brackets[roundIndex + 1].length + 1)) *
                             (Math.floor(matchIndex / 2) + 1)
                           }
-                          stroke="black"
-                          strokeWidth="1"
+                          stroke={match.winner ? "#28a745" : "#dee2e6"}
+                          strokeWidth={match.winner ? "2" : "1"}
                         />
                       )}
                     </G>
@@ -267,7 +352,7 @@ const ViewTournament = () => {
       <ScrollView horizontal>
         <ScrollView>
           <Svg height={svgHeight} width={svgWidth}>
-            {/* Render header row and column */}
+            {/* Header row */}
             {teams.map((team, index) => (
               <G key={`header-${index}`}>
                 <Rect
@@ -275,8 +360,8 @@ const ViewTournament = () => {
                   y={index * cellSize + headerHeight}
                   width={cellSize}
                   height={cellSize}
-                  fill="white"
-                  stroke="black"
+                  fill="#ffffff"
+                  stroke="#dee2e6"
                 />
                 <SvgText
                   x={cellSize + 5}
@@ -287,6 +372,49 @@ const ViewTournament = () => {
                 </SvgText>
               </G>
             ))}
+
+            {/* Results grid */}
+            {teams.map((teamA, rowIndex) =>
+              teams.map((teamB, colIndex) => {
+                if (rowIndex !== colIndex) {
+                  const match = matchHistory.find(
+                    (m) =>
+                      (m.teamA === teamA.name && m.teamB === teamB.name) ||
+                      (m.teamA === teamB.name && m.teamB === teamA.name)
+                  );
+
+                  const cellFill = match
+                    ? match.winner === teamA.name
+                      ? "#d1e7dd"
+                      : "#f8d7da"
+                    : "#ffffff";
+
+                  return (
+                    <G key={`cell-${rowIndex}-${colIndex}`}>
+                      <Rect
+                        x={(colIndex + 1) * cellSize}
+                        y={rowIndex * cellSize + headerHeight}
+                        width={cellSize}
+                        height={cellSize}
+                        fill={cellFill}
+                        stroke="#dee2e6"
+                      />
+                      {match && (
+                        <SvgText
+                          x={(colIndex + 1) * cellSize + 15}
+                          y={rowIndex * cellSize + headerHeight + 25}
+                          fontSize={12}
+                          textAnchor="middle"
+                        >
+                          {match.winner === teamA.name ? "W" : "L"}
+                        </SvgText>
+                      )}
+                    </G>
+                  );
+                }
+                return null;
+              })
+            )}
           </Svg>
         </ScrollView>
       </ScrollView>
@@ -316,12 +444,6 @@ const ViewTournament = () => {
     } else {
       Alert.alert("No Match Selected", "Please select a match first.");
     }
-  };
-
-  const closeMatchModal = () => {
-    setModalVisible(false);
-    resetScores();
-    setSelectedMatch(null);
   };
 
   const resetScores = () => {
@@ -418,7 +540,6 @@ const ViewTournament = () => {
     }
   };
 
-  // Handle match completion and tournament progression
   const handleMatchCompletion = (winningTeam, losingTeam) => {
     if (tournamentType === "Round Robin") {
       updateRoundRobinResults(winningTeam, losingTeam);
@@ -428,6 +549,16 @@ const ViewTournament = () => {
 
     // Add winner to the winners array
     setWinners((prev) => [...prev, winningTeam]);
+
+    // Add to match history
+    setMatchHistory((prev) => [
+      ...prev,
+      {
+        teamA: selectedMatch.teamA,
+        teamB: selectedMatch.teamB,
+        winner: winningTeam.name,
+      },
+    ]);
 
     // Progress to next match
     setCurrentMatch((prev) => prev + 1);
@@ -473,7 +604,7 @@ const ViewTournament = () => {
     const updatedBrackets = [...brackets];
     const currentRoundMatches = updatedBrackets[currentRound - 1];
 
-    // Find the match index in current round
+    // Find the match index in the current round
     const matchIndex = currentRoundMatches.findIndex(
       (match) =>
         match.teamA === selectedMatch.teamA &&
@@ -599,14 +730,32 @@ const ViewTournament = () => {
     }
   };
 
-  const renderHistory = () => {
+  const renderMatchHistory = () => {
     return matchHistory.map((match, index) => (
       <View key={index} style={styles.historyItem}>
-        <Text>
+        <Text style={styles.historyText}>
           {match.teamA} vs {match.teamB} - Winner: {match.winner}
         </Text>
       </View>
     ));
+  };
+
+  const closeMatchModal = () => {
+    // Determine the winning team based on the scores
+    const winningTeam =
+      scoreTeamA > scoreTeamB
+        ? { name: selectedMatch.teamA }
+        : { name: selectedMatch.teamB };
+    const losingTeam =
+      scoreTeamA > scoreTeamB
+        ? { name: selectedMatch.teamB }
+        : { name: selectedMatch.teamA };
+
+    // Call handleMatchCompletion to finalize the match
+    handleMatchCompletion(winningTeam, losingTeam);
+
+    // Close the modal
+    setModalVisible(false);
   };
 
   return (
@@ -684,6 +833,20 @@ const ViewTournament = () => {
                 </TouchableOpacity>
                 {/* Add tournament progress section */}
                 {renderTournamentProgress()}
+
+                {/* Display Winners Section */}
+                <View style={styles.winnerSection}>
+                  <Text style={styles.title}>Winners:</Text>
+                  {winners.length > 0 ? (
+                    winners.map((winner, index) => (
+                      <Text key={index} style={styles.winnerText}>
+                        {winner}
+                      </Text>
+                    ))
+                  ) : (
+                    <Text>No winners yet</Text>
+                  )}
+                </View>
               </View>
             </>
           )}
@@ -762,11 +925,26 @@ const ViewTournament = () => {
               </TouchableOpacity>
             </View>
 
+            {/* Display Match History in the Modal */}
             <View style={styles.historySection}>
               <Text style={styles.historyTitle}>Match History:</Text>
               <ScrollView style={styles.historyContainer}>
-                {renderHistory()}
+                {renderMatchHistory()}
               </ScrollView>
+            </View>
+
+            {/* Display Winners in the Modal if needed */}
+            <View style={styles.winnerSection}>
+              <Text style={styles.title}>Winners:</Text>
+              {winners.length > 0 ? (
+                winners.map((winner, index) => (
+                  <Text key={index} style={styles.winnerText}>
+                    {winner}
+                  </Text>
+                ))
+              ) : (
+                <Text>No winners yet</Text>
+              )}
             </View>
           </View>
         </View>
