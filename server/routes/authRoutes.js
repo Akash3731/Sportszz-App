@@ -154,7 +154,7 @@ router.post("/managers", async (req, res) => {
     await newManager.save();
 
     // Update login link for development environment using Expo deep link
-    const loginLink = `exp://172.20.10.4:8081/--/manager-login`;
+    const loginLink = `exp://192.168.0.173:8081/--/manager-login`;
 
     // Sending the email with credentials
     const mailOptions = {

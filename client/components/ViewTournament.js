@@ -3,220 +3,468 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
+  TouchableOpacity,
+  Modal,
   ActivityIndicator,
+  Alert,
 } from "react-native";
-import config from "./config"; // Adjust the import path according to your project structure
+import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import config from "./config"; // Adjust the path according to your project structure
+import { Svg, Line, Text as SvgText, G } from "react-native-svg"; // Import SVG components
+import { Picker } from "@react-native-picker/picker"; // Make sure to import Picker
 
-// Mock tournament diagram
 const ViewTournament = () => {
+  const [managerId, setManagerId] = useState(null);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [scoreTeamA, setScoreTeamA] = useState(0);
+  const [scoreTeamB, setScoreTeamB] = useState(0);
+  const [teams, setTeams] = useState([]);
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [setCount, setSetCount] = useState(1);
+  const [setScoreA, setSetScoreA] = useState([0, 0, 0, 0, 0]); // Max 5 sets
+  const [setScoreB, setSetScoreB] = useState([0, 0, 0, 0, 0]);
+  const [winners, setWinners] = useState([]); // Array to store winners of each match
+  const [matchHistory, setMatchHistory] = useState([]); // Array to store match history
+  const [matchType, setMatchType] = useState("Single Elimination"); // New state for match
 
-  // Fetch first manager ID
   const fetchManagerId = async () => {
     try {
-      const response = await fetch(`${config.backendUrl}/managers/first`); // Use config.backendUrl
-      const data = await response.json();
-      if (data._id) {
-        fetchGroups(data._id);
+      setLoading(true);
+      const managerId = await AsyncStorage.getItem("manager-id");
+      if (!managerId) {
+        Alert.alert("Error", "No manager logged in. Please log in again.");
+        return;
       }
+      const response = await axios.get(`${config.backendUrl}/managers/me`, {
+        headers: { "manager-id": managerId },
+      });
+      setManagerId(response.data._id);
+      await fetchGroups(response.data._id);
     } catch (error) {
       console.error("Error fetching manager ID:", error);
+      Alert.alert("Error", "Failed to fetch manager ID");
+    } finally {
       setLoading(false);
     }
   };
 
-  // Fetch groups for the manager
-  const fetchGroups = async (managerId) => {
+  const fetchGroups = async (mgrId) => {
+    if (!mgrId) return;
     try {
-      const response = await fetch(
-        `${config.backendUrl}/managers/${managerId}/groups`
-      ); // Use config.backendUrl
-      const data = await response.json();
-      const groupsWithTeams = await Promise.all(
-        data.map(async (group) => {
-          const teams = await fetchTeams(managerId, group._id);
-          return { ...group, teams };
-        })
+      const response = await axios.get(
+        `${config.backendUrl}/managers/${mgrId}/groups`
       );
-      setGroups(groupsWithTeams);
-      setLoading(false);
+      setGroups(response.data);
     } catch (error) {
       console.error("Error fetching groups:", error);
-      setLoading(false);
+      Alert.alert("Error", "Failed to fetch groups");
     }
   };
 
-  // Fetch teams in a group
-  const fetchTeams = async (managerId, groupId) => {
-    try {
-      const response = await fetch(
-        `${config.backendUrl}/managers/${managerId}/groups/${groupId}/teams`
-      ); // Use config.backendUrl
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching teams:", error);
-      return [];
-    }
-  };
-
-  // Fetch players in a team
-  const fetchPlayers = async (managerId, groupId, teamId) => {
-    try {
-      const response = await fetch(
-        `${config.backendUrl}/managers/${managerId}/groups/${groupId}/teams/${teamId}/players`
-      ); // Use config.backendUrl
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching players:", error);
-      return [];
-    }
-  };
-
-  // Effect to fetch manager ID on mount
   useEffect(() => {
     fetchManagerId();
   }, []);
 
-  // Render Players
-  const renderPlayers = (players) => {
-    return players.map((player) => (
-      <View key={player._id} style={styles.playerCard}>
-        <Text style={styles.playerName}>{player.name}</Text>
-        <Text style={styles.playerPosition}>{player.position}</Text>
-      </View>
-    ));
-  };
-
-  // Render Teams within a Group
-  const renderTeams = (teams, managerId, groupId) => {
-    return teams.map(async (team) => {
-      const players = await fetchPlayers(managerId, groupId, team._id);
-      return (
-        <View key={team._id} style={styles.teamCard}>
-          <Text style={styles.teamName}>{team.name}</Text>
-          <View style={styles.playersContainer}>{renderPlayers(players)}</View>
-        </View>
+  const fetchTeams = async (groupId) => {
+    try {
+      const response = await axios.get(
+        `${config.backendUrl}/managers/${managerId}/groups/${groupId}/teams`
       );
-    });
+      setTeams(response.data);
+      setSelectedGroupId(groupId);
+      setWinners([]); // Reset winners when new teams are fetched
+    } catch (error) {
+      console.error("Error fetching teams:", error);
+      Alert.alert("Error", "Failed to fetch teams");
+    }
   };
 
-  // Render Groups as Tournament Columns
-  const renderGroups = () => {
-    return groups.map((group) => (
-      <View key={group._id} style={styles.groupColumn}>
-        <Text style={styles.groupName}>{group.name}</Text>
-        <View style={styles.teamsContainer}>
-          {renderTeams(group.teams, group.managerId, group._id)}
-        </View>
+  const selectMatch = (teamA, teamB) => {
+    setSelectedMatch({ teamA, teamB });
+  };
+
+  const handleMatchStart = () => {
+    if (selectedMatch) {
+      resetScores();
+      setModalVisible(true);
+    } else {
+      Alert.alert("No Match Selected", "Please select a match first.");
+    }
+  };
+
+  const closeMatchModal = () => {
+    setModalVisible(false);
+    resetScores();
+    setSelectedMatch(null);
+  };
+
+  const resetScores = () => {
+    setScoreTeamA(0);
+    setScoreTeamB(0);
+    setSetScoreA([0, 0, 0, 0, 0]); // Reset set scores
+    setSetScoreB([0, 0, 0, 0, 0]);
+    setSetCount(1); // Reset to the first set
+  };
+
+  const handleScoreUpdate = (team) => {
+    if (team === "A") {
+      setScoreTeamA((prev) => prev + 1);
+    } else {
+      setScoreTeamB((prev) => prev + 1);
+    }
+  };
+
+  const handleSetEnd = () => {
+    if (scoreTeamA >= 11 && scoreTeamA - scoreTeamB >= 2) {
+      const updatedSetScoreA = [...setScoreA];
+      updatedSetScoreA[setCount - 1] += 1;
+      setSetScoreA(updatedSetScoreA);
+      setWinners((prev) => [...prev, selectedMatch.teamA]); // Store winner
+      setMatchHistory((prev) => [
+        ...prev,
+        {
+          winner: selectedMatch.teamA,
+          teamA: selectedMatch.teamA,
+          teamB: selectedMatch.teamB,
+        },
+      ]); // Add match result to history
+      setSetCount((prev) => Math.min(prev + 1, 5)); // Limit sets to a max of 5
+      resetCurrentSetScores();
+      Alert.alert("Set Ended", `${selectedMatch.teamA} wins the set!`);
+      checkMatchEnd();
+    } else if (scoreTeamB >= 11 && scoreTeamB - scoreTeamA >= 2) {
+      const updatedSetScoreB = [...setScoreB];
+      updatedSetScoreB[setCount - 1] += 1;
+      setSetScoreB(updatedSetScoreB);
+      setWinners((prev) => [...prev, selectedMatch.teamB]); // Store winner
+      setMatchHistory((prev) => [
+        ...prev,
+        {
+          winner: selectedMatch.teamB,
+          teamA: selectedMatch.teamA,
+          teamB: selectedMatch.teamB,
+        },
+      ]); // Add match result to history
+      setSetCount((prev) => Math.min(prev + 1, 5)); // Limit sets to a max of 5
+      resetCurrentSetScores();
+      Alert.alert("Set Ended", `${selectedMatch.teamB} wins the set!`);
+      checkMatchEnd();
+    } else {
+      Alert.alert(
+        "Error",
+        "Set cannot end yet. Ensure a player has at least 11 points and a 2-point lead."
+      );
+    }
+  };
+
+  const resetCurrentSetScores = () => {
+    setScoreTeamA(0);
+    setScoreTeamB(0);
+  };
+
+  const checkMatchEnd = () => {
+    const totalSetsA = setScoreA.reduce((acc, score) => acc + score, 0);
+    const totalSetsB = setScoreB.reduce((acc, score) => acc + score, 0);
+
+    if (totalSetsA > 2) {
+      Alert.alert("Match Over", `${selectedMatch.teamA} wins the match!`);
+      closeMatchModal();
+    } else if (totalSetsB > 2) {
+      Alert.alert("Match Over", `${selectedMatch.teamB} wins the match!`);
+      closeMatchModal();
+    }
+  };
+
+  const renderGroup = ({ item }) => (
+    <TouchableOpacity
+      style={styles.groupContainer}
+      onPress={() => fetchTeams(item._id)}
+    >
+      <Text style={styles.groupText}>{item.name}</Text>
+    </TouchableOpacity>
+  );
+
+  const renderMatchup = (teamA, teamB) => (
+    <View style={styles.matchupContainer}>
+      <TouchableOpacity
+        style={[
+          styles.matchupButton,
+          selectedMatch?.teamA === teamA.name &&
+          selectedMatch?.teamB === teamB.name
+            ? styles.selectedMatch
+            : null,
+        ]}
+        onPress={() => selectMatch(teamA.name, teamB.name)}
+      >
+        <Text style={styles.matchupText}>
+          {teamA.name} vs {teamB.name}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // Function to render SVG Bracket based on the match type
+  const renderBracket = () => {
+    const numTeams = teams.length;
+    const matchups = [];
+
+    // Build initial matchups
+    for (let i = 0; i < numTeams; i += 2) {
+      if (teams[i + 1]) {
+        matchups.push({
+          teamA: teams[i],
+          teamB: teams[i + 1],
+        });
+      }
+    }
+
+    return (
+      <Svg height="400" width="100%">
+        <G>
+          {matchups.map((matchup, index) => (
+            <React.Fragment key={index}>
+              <Line
+                x1="5%"
+                y1={index * 80 + 50}
+                x2="95%"
+                y2={index * 80 + 50}
+                stroke="black"
+                strokeWidth="2"
+              />
+              <SvgText x="5%" y={index * 80 + 50} fontSize="16" fill="black">
+                {matchup.teamA.name} vs {matchup.teamB.name}
+              </SvgText>
+            </React.Fragment>
+          ))}
+        </G>
+      </Svg>
+    );
+  };
+
+  const renderHistory = () => {
+    return matchHistory.map((match, index) => (
+      <View key={index} style={styles.historyItem}>
+        <Text>
+          {match.teamA} vs {match.teamB} - Winner: {match.winner}
+        </Text>
       </View>
     ));
   };
-
-  // Loading state
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0000ff" />
-      </View>
-    );
-  }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} horizontal={true}>
-      <Text style={styles.tournamentTitle}>Tournament Bracket</Text>
-      <View style={styles.tournamentDiagram}>{renderGroups()}</View>
-    </ScrollView>
+    <View style={styles.container}>
+      {loading ? (
+        <ActivityIndicator size="large" color="#0000ff" />
+      ) : (
+        <>
+          <FlatList
+            data={groups}
+            renderItem={renderGroup}
+            keyExtractor={(item) => item._id}
+            contentContainerStyle={styles.groupList}
+            showsVerticalScrollIndicator={false}
+          />
+          {selectedGroupId && teams.length > 0 && (
+            <>
+              <Text style={styles.title}>Matchups:</Text>
+              <FlatList
+                data={teams}
+                renderItem={({ item }) =>
+                  renderMatchup(
+                    item,
+                    teams[(teams.indexOf(item) + 1) % teams.length]
+                  )
+                }
+                keyExtractor={(item) => item._id}
+                contentContainerStyle={styles.matchupList}
+                showsVerticalScrollIndicator={false}
+              />
+              <TouchableOpacity
+                style={styles.startButton}
+                onPress={handleMatchStart}
+              >
+                <Text style={styles.startButtonText}>Start Match</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </>
+      )}
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={closeMatchModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {selectedMatch?.teamA} vs {selectedMatch?.teamB}
+            </Text>
+            <Text>Score:</Text>
+            <View style={styles.scoreContainer}>
+              <View style={styles.scoreInput}>
+                <Text>{scoreTeamA}</Text>
+                <TouchableOpacity onPress={() => handleScoreUpdate("A")}>
+                  <Text style={styles.scoreButton}>Add Point Team A</Text>
+                </TouchableOpacity>
+                <Text>Sets: {setScoreA.join(", ")}</Text>
+              </View>
+              <View style={styles.scoreInput}>
+                <Text>{scoreTeamB}</Text>
+                <TouchableOpacity onPress={() => handleScoreUpdate("B")}>
+                  <Text style={styles.scoreButton}>Add Point Team B</Text>
+                </TouchableOpacity>
+                <Text>Sets: {setScoreB.join(", ")}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.endSetButton}
+              onPress={handleSetEnd}
+            >
+              <Text style={styles.endSetButtonText}>End Set</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={closeMatchModal}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+            <Text style={styles.historyTitle}>Match History:</Text>
+            <View style={styles.historyContainer}>{renderHistory()}</View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 };
 
-// Styles for Tournament Diagram
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
-    padding: 20,
-    backgroundColor: "#F8F8F8",
-  },
-  tournamentTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  tournamentDiagram: {
-    flexDirection: "row", // Place groups side by side like columns
-    justifyContent: "space-evenly",
-  },
-  groupColumn: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 20,
-    marginHorizontal: 8,
-    alignItems: "center",
-    minWidth: 200,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  groupName: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginBottom: 16,
-  },
-  teamsContainer: {
-    flexDirection: "column", // Teams are stacked vertically within a group
-    justifyContent: "space-between",
-  },
-  teamCard: {
-    backgroundColor: "#F2F2F7",
-    borderRadius: 8,
+    flex: 1,
     padding: 16,
+    backgroundColor: "#f5f5f5",
+  },
+  groupList: {
     marginBottom: 16,
-    alignItems: "center",
-    width: "100%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+  },
+  groupContainer: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
+    marginVertical: 4,
     elevation: 2,
   },
-  teamName: {
+  groupText: {
     fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
+    color: "#333333",
   },
-  playersContainer: {
-    borderTopWidth: 1,
-    borderTopColor: "#C6C6C8",
-    paddingTop: 8,
-    width: "100%",
+  title: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginVertical: 8,
   },
-  playerCard: {
-    backgroundColor: "#FFFFFF",
-    padding: 8,
-    borderRadius: 4,
-    marginBottom: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+  matchupContainer: {
+    marginVertical: 4,
+  },
+  matchupButton: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
     elevation: 2,
+    alignItems: "center",
   },
-  playerName: {
-    fontSize: 14,
-    fontWeight: "500",
+  selectedMatch: {
+    backgroundColor: "#d1e7dd",
   },
-  playerPosition: {
-    fontSize: 12,
-    color: "#8E8E93",
+  matchupText: {
+    fontSize: 16,
+    color: "#333333",
   },
-  loadingContainer: {
+  startButton: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#007bff",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  startButtonText: {
+    color: "#ffffff",
+    fontWeight: "bold",
+  },
+  modalOverlay: {
     flex: 1,
     justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalContent: {
+    backgroundColor: "#ffffff",
+    borderRadius: 8,
+    padding: 16,
+    margin: 16,
+    elevation: 4,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 16,
+  },
+  scoreContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  scoreInput: {
+    flex: 1,
     alignItems: "center",
+  },
+  scoreButton: {
+    padding: 8,
+    backgroundColor: "#e7f1ff",
+    borderRadius: 8,
+    textAlign: "center",
+    marginVertical: 4,
+  },
+  endSetButton: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#28a745",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  endSetButtonText: {
+    color: "#ffffff",
+    fontWeight: "bold",
+  },
+  closeButton: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#dc3545",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  closeButtonText: {
+    color: "#ffffff",
+    fontWeight: "bold",
+  },
+  historyTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginVertical: 8,
+  },
+  historyContainer: {
+    marginTop: 8,
+  },
+  historyItem: {
+    padding: 8,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 4,
+    marginBottom: 4,
   },
 });
 
