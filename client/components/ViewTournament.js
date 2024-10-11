@@ -15,6 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import config from "./config";
 import { Svg, Line, Text as SvgText, G, Rect } from "react-native-svg";
 import RNPickerSelect from "react-native-picker-select";
+import Icon from "react-native-vector-icons/FontAwesome";
 
 const ViewTournament = () => {
   const [managerId, setManagerId] = useState(null);
@@ -23,21 +24,47 @@ const ViewTournament = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [isMatchHistoryVisible, setMatchHistoryVisible] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
-  const [scoreTeamA, setScoreTeamA] = useState(0);
-  const [scoreTeamB, setScoreTeamB] = useState(0);
+
   const [teams, setTeams] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [setCount, setSetCount] = useState(1);
-  const [setScoreA, setSetScoreA] = useState([0, 0, 0, 0, 0]);
-  const [setScoreB, setSetScoreB] = useState([0, 0, 0, 0, 0]);
   const [winners, setWinners] = useState([]);
   const [matchHistory, setMatchHistory] = useState([]);
-  const [matchType, setMatchType] = useState("Singles");
+  const [matchType, setMatchType] = useState(null);
   const [tournamentType, setTournamentType] = useState("Single Elimination");
   const [roundRobinResults, setRoundRobinResults] = useState({});
   const [currentRound, setCurrentRound] = useState(1);
   const [brackets, setBrackets] = useState([]);
   const [currentMatch, setCurrentMatch] = useState(1);
+  const [scoreTeamA, setScoreTeamA] = useState(0);
+  const [scoreTeamB, setScoreTeamB] = useState(0);
+  const [setScoreA, setSetScoreA] = useState([]);
+  const [setScoreB, setSetScoreB] = useState([]);
+  const [numOfSets, setNumOfSets] = useState(null);
+  const [matchWinner, setMatchWinner] = useState(null);
+  const [timer, setTimer] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [setHistory, setSetHistory] = useState([]);
+  const [currentSet, setCurrentSet] = useState(1);
+  const [setScores, setSetScores] = useState([]);
+
+  const matchTypeOptions = [
+    { label: "Singles (Best of 7)", value: "Singles" },
+    { label: "Team (4 Singles + 1 Doubles)", value: "Team" },
+  ];
+
+  // Handle timer logic
+  useEffect(() => {
+    let interval = null;
+    if (isRunning) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev + 1);
+      }, 1000);
+    } else if (!isRunning && timer !== 0) {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [isRunning, timer]);
 
   // Initialize round-robin results when teams are loaded
   useEffect(() => {
@@ -438,91 +465,138 @@ const ViewTournament = () => {
     }
   };
 
-  // Reset scores for the next set
+  // Handle ending a match within a team format
+  const handleMatchEnd = () => {
+    if (matchType === "Team" && currentMatch < 5) {
+      // Progress to the next match in a team format
+      setCurrentMatch((prev) => prev + 1);
+      setMatchHistory((prev) => [
+        ...prev,
+        { matchNumber: currentMatch, winner: matchWinner },
+      ]);
+      resetMatch(); // Resets for the next match
+    } else if (matchType === "Team" && currentMatch === 5) {
+      // End the team match after 5 matches
+      Alert.alert("Team Match Over", "Team match has concluded.");
+      closeMatchModal(); // Close the modal after the team match concludes
+    } else {
+      // For singles, handle the end of the match
+      if (setScoreA.length >= Math.ceil(numOfSets / 2)) {
+        setMatchWinner("A");
+        Alert.alert("Match Over", `${selectedMatch?.teamA} wins the match!`);
+      } else if (setScoreB.length >= Math.ceil(numOfSets / 2)) {
+        setMatchWinner("B");
+        Alert.alert("Match Over", `${selectedMatch?.teamB} wins the match!`);
+      }
+    }
+  };
+
   const resetScores = () => {
     setScoreTeamA(0);
     setScoreTeamB(0);
   };
 
-  // Score update function for singles match
   const handleScoreUpdate = (team) => {
     if (team === "A") {
-      // Increment score for Team A
       setScoreTeamA((prev) => prev + 1);
-
-      // Check if Team A has won the set
-      if (scoreTeamA >= 11 && scoreTeamA - scoreTeamB >= 2) {
+      if (scoreTeamA >= 10 && scoreTeamA - scoreTeamB >= 2) {
         handleSetWin("A");
       }
     } else if (team === "B") {
-      // Increment score for Team B
       setScoreTeamB((prev) => prev + 1);
-
-      // Check if Team B has won the set
-      if (scoreTeamB >= 11 && scoreTeamB - scoreTeamA >= 2) {
+      if (scoreTeamB >= 10 && scoreTeamB - scoreTeamA >= 2) {
         handleSetWin("B");
       }
     }
   };
 
-  // Handle set win for singles
   const handleSetWin = (winningTeam) => {
     if (winningTeam === "A") {
-      setScoreA((prev) => {
-        const newScore = [...prev, scoreTeamA];
-        resetScores(); // Reset scores for the next set
-        return newScore;
-      });
-    } else if (winningTeam === "B") {
-      setScoreB((prev) => {
-        const newScore = [...prev, scoreTeamB];
-        resetScores(); // Reset scores for the next set
-        return newScore;
-      });
+      setSetScoreA((prev) => [...prev, scoreTeamA]);
+    } else {
+      setSetScoreB((prev) => [...prev, scoreTeamB]);
     }
+    resetScores(); // Reset scores for the next set
+    setSetCount((prev) => Math.min(prev + 1, numOfSets)); // Limit to max of selected sets
+    checkMatchEnd();
+    Alert.alert(
+      "Set Ended",
+      `${
+        winningTeam === "A" ? selectedMatch.teamA : selectedMatch.teamB
+      } wins the set!`
+    );
   };
 
+  // Handle end of set
   const handleSetEnd = () => {
+    // Check if one team has won the set
     if (scoreTeamA >= 11 && scoreTeamA - scoreTeamB >= 2) {
-      const updatedSetScoreA = [...setScoreA];
-      updatedSetScoreA[setCount - 1] += 1;
-      setSetScoreA(updatedSetScoreA);
-      setWinners((prev) => [...prev, selectedMatch.teamA]); // Store winner
-      setMatchHistory((prev) => [
+      setSetScoreA((prev) => [...prev, 1]); // Record a set win for Team A
+      setSetHistory((prev) => [
         ...prev,
-        {
-          winner: selectedMatch.teamA,
-          teamA: selectedMatch.teamA,
-          teamB: selectedMatch.teamB,
-        },
-      ]); // Add match result to history
-      setSetCount((prev) => Math.min(prev + 1, 5)); // Limit sets to a max of 5
-      resetCurrentSetScores();
-      Alert.alert("Set Ended", `${selectedMatch.teamA} wins the set!`);
-      checkMatchEnd();
+        { set: currentSet, scoreA: scoreTeamA, scoreB: scoreTeamB },
+      ]);
+      resetScores(); // Reset team scores for the next set
+      setCurrentSet((prev) => prev + 1); // Move to the next set
     } else if (scoreTeamB >= 11 && scoreTeamB - scoreTeamA >= 2) {
-      const updatedSetScoreB = [...setScoreB];
-      updatedSetScoreB[setCount - 1] += 1;
-      setSetScoreB(updatedSetScoreB);
-      setWinners((prev) => [...prev, selectedMatch.teamB]); // Store winner
-      setMatchHistory((prev) => [
+      setSetScoreB((prev) => [...prev, 1]); // Record a set win for Team B
+      setSetHistory((prev) => [
         ...prev,
-        {
-          winner: selectedMatch.teamB,
-          teamA: selectedMatch.teamA,
-          teamB: selectedMatch.teamB,
-        },
-      ]); // Add match result to history
-      setSetCount((prev) => Math.min(prev + 1, 5)); // Limit sets to a max of 5
-      resetCurrentSetScores();
-      Alert.alert("Set Ended", `${selectedMatch.teamB} wins the set!`);
-      checkMatchEnd();
+        { set: currentSet, scoreA: scoreTeamA, scoreB: scoreTeamB },
+      ]);
+      resetScores(); // Reset team scores for the next set
+      setCurrentSet((prev) => prev + 1); // Move to the next set
     } else {
       Alert.alert(
         "Error",
         "Set cannot end yet. Ensure a player has at least 11 points and a 2-point lead."
       );
+      return; // Exit the function if set cannot end
     }
+
+    // Check if the match is over
+    if (setScoreA.length >= Math.ceil(numOfSets / 2)) {
+      setMatchWinner("A");
+      Alert.alert("Match Over", `${selectedMatch?.teamA} wins the match!`);
+    } else if (setScoreB.length >= Math.ceil(numOfSets / 2)) {
+      setMatchWinner("B");
+      Alert.alert("Match Over", `${selectedMatch?.teamB} wins the match!`);
+    }
+  };
+
+  // Function to add points to Team A
+  const addPointsTeamA = () => {
+    setScoreTeamA(scoreTeamA + 1);
+  };
+
+  // Function to add points to Team B
+  const addPointsTeamB = () => {
+    setScoreTeamB(scoreTeamB + 1);
+  };
+
+  // Function to decrement points from Team A
+  const decrementPointsTeamA = () => {
+    if (scoreTeamA > 0) {
+      setScoreTeamA(scoreTeamA - 1);
+    }
+  };
+
+  // Function to decrement points from Team B
+  const decrementPointsTeamB = () => {
+    if (scoreTeamB > 0) {
+      setScoreTeamB(scoreTeamB - 1);
+    }
+  };
+
+  const resetMatch = () => {
+    resetScores();
+    setSetScoreA([]);
+    setSetScoreB([]);
+    setCurrentSet(1);
+    setMatchWinner(null);
+    setSetHistory([]);
+    setTimer(0);
+    setIsRunning(false);
   };
 
   const closeMatchModal = () => {
@@ -546,19 +620,14 @@ const ViewTournament = () => {
     </View>
   );
 
-  const resetCurrentSetScores = () => {
-    setScoreTeamA(0);
-    setScoreTeamB(0);
-  };
-
   const checkMatchEnd = () => {
-    const totalSetsA = setScoreA.reduce((acc, score) => acc + score, 0);
-    const totalSetsB = setScoreB.reduce((acc, score) => acc + score, 0);
+    const totalSetsA = setScoreA.length; // Use the renamed variable
+    const totalSetsB = setScoreB.length; // Use the renamed variable
 
-    if (totalSetsA > 2) {
+    if (totalSetsA >= Math.ceil(numOfSets / 2)) {
       Alert.alert("Match Over", `${selectedMatch.teamA} wins the match!`);
       closeMatchModal();
-    } else if (totalSetsB > 2) {
+    } else if (totalSetsB >= Math.ceil(numOfSets / 2)) {
       Alert.alert("Match Over", `${selectedMatch.teamB} wins the match!`);
       closeMatchModal();
     }
@@ -783,16 +852,15 @@ const ViewTournament = () => {
       {loading ? (
         <ActivityIndicator size="large" color="#0000ff" />
       ) : (
-        <ScrollView style={styles.scrollView}>
-          <FlatList
-            data={groups}
-            renderItem={renderGroup}
-            keyExtractor={(item) => item._id}
-            contentContainerStyle={styles.groupList}
-            showsVerticalScrollIndicator={false}
-          />
-          {selectedGroupId && teams.length > 0 && (
-            <>
+        <FlatList
+          data={groups}
+          renderItem={renderGroup}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.groupList}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            selectedGroupId &&
+            teams.length > 0 && (
               <View style={styles.tournamentConfigSection}>
                 <Text style={styles.title}>Tournament Configuration</Text>
 
@@ -830,32 +898,32 @@ const ViewTournament = () => {
                     value={matchType}
                   />
                 </View>
-              </View>
 
-              <View style={styles.bracketContainer}>
-                <Text style={styles.title}>Tournament Bracket</Text>
-                {renderBracket()}
-              </View>
+                <View style={styles.bracketContainer}>
+                  <Text style={styles.title}>Tournament Bracket</Text>
+                  {renderBracket()}
+                </View>
 
-              <View style={styles.matchupsSection}>
-                <Text style={styles.title}>Current Matchups:</Text>
-                <FlatList
-                  data={brackets[0]} // Get the first round of matches dynamically
-                  renderItem={({ item }) => renderMatchup(item)} // Pass the entire match object
-                  keyExtractor={(item) => `${item.teamA}-${item.teamB}`} // Use team names as key
-                  contentContainerStyle={styles.matchupList}
-                  showsVerticalScrollIndicator={false}
-                />
-                <TouchableOpacity
-                  style={styles.startButton}
-                  onPress={handleMatchStart}
-                >
-                  <Text style={styles.startButtonText}>Start Match</Text>
-                </TouchableOpacity>
+                <View style={styles.matchupsSection}>
+                  <Text style={styles.title}>Current Matchups:</Text>
+                  <FlatList
+                    data={brackets[0]} // Get the first round of matches dynamically
+                    renderItem={({ item }) => renderMatchup(item)} // Pass the entire match object
+                    keyExtractor={(item) => `${item.teamA}-${item.teamB}`} // Use team names as key
+                    contentContainerStyle={styles.matchupList}
+                    showsVerticalScrollIndicator={false}
+                  />
+                  <TouchableOpacity
+                    style={styles.startButton}
+                    onPress={handleMatchStart}
+                  >
+                    <Text style={styles.startButtonText}>Start Match</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </>
-          )}
-        </ScrollView>
+            )
+          }
+        />
       )}
 
       <Modal
@@ -866,59 +934,147 @@ const ViewTournament = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {selectedMatch?.teamA} vs {selectedMatch?.teamB}
-            </Text>
-            <Text style={styles.modalSubtitle}>
-              {matchType === "Singles" ? "Best of 7" : "Team Match"}
-            </Text>
-            <View style={styles.scoreContainer}>
-              <View style={styles.scoreInput}>
-                <Text style={styles.scoreText}>{scoreTeamA}</Text>
-                <TouchableOpacity
-                  style={styles.scoreButton}
-                  onPress={() => handleScoreUpdate("A")}
-                >
-                  <Text style={styles.scoreButtonText}>Add Point Team A</Text>
-                </TouchableOpacity>
-                <Text style={styles.setScoreText}>
-                  Sets: {setScoreA.join(", ")}
-                </Text>
+            {/* Match Header */}
+            <View style={styles.matchHeader}>
+              <Text style={styles.modalTitle}>
+                <Icon name="trophy" size={24} color="#007AFF" />
+                {` ${selectedMatch?.teamA} vs ${selectedMatch?.teamB}`}
+              </Text>
+            </View>
+
+            {/* Sets Configuration */}
+            <View style={styles.setsConfig}>
+              <Text style={styles.sectionTitle}>Match Configuration</Text>
+              <RNPickerSelect
+                onValueChange={(value) => setNumOfSets(value)}
+                items={[
+                  { label: "Best of 3 Sets", value: 3 },
+                  { label: "Best of 5 Sets", value: 5 },
+                  { label: "Best of 7 Sets", value: 7 },
+                ]}
+                value={numOfSets}
+                style={pickerSelectStyles}
+                placeholder={{ label: "Select number of sets", value: null }}
+              />
+            </View>
+
+            {/* Scoreboard */}
+            <View style={styles.scoreboard}>
+              <Text style={styles.scoreboardTitle}>Match Scoreboard</Text>
+
+              {/* Header Row */}
+              <View style={styles.scoreboardHeaderRow}>
+                <Text style={styles.headerCell}>Teams</Text>
+                <Text style={styles.headerCell}>Points</Text>
+                <Text style={styles.headerCell}>Controls</Text>
               </View>
 
-              <View style={styles.scoreDivider}>
-                <Text style={styles.vsText}>VS</Text>
+              {/* Team A Row */}
+              <View style={styles.scoreboardRow}>
+                <Text style={styles.teamCell}>{selectedMatch?.teamA}</Text>
+                <Text style={styles.scoreCell}>{scoreTeamA}</Text>
+                <View style={styles.controlsCell}>
+                  <TouchableOpacity
+                    style={styles.pointButton}
+                    onPress={addPointsTeamA}
+                  >
+                    <Icon name="plus" size={20} color="#28a745" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.pointButton}
+                    onPress={decrementPointsTeamA}
+                  >
+                    <Icon name="minus" size={20} color="#dc3545" />
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              <View style={styles.scoreInput}>
-                <Text style={styles.scoreText}>{scoreTeamB}</Text>
-                <TouchableOpacity
-                  style={styles.scoreButton}
-                  onPress={() => handleScoreUpdate("B")}
-                >
-                  <Text style={styles.scoreButtonText}>Add Point Team B</Text>
-                </TouchableOpacity>
-                <Text style={styles.setScoreText}>
-                  Sets: {setScoreB.join(", ")}
-                </Text>
+              {/* Team B Row */}
+              <View style={styles.scoreboardRow}>
+                <Text style={styles.teamCell}>{selectedMatch?.teamB}</Text>
+                <Text style={styles.scoreCell}>{scoreTeamB}</Text>
+                <View style={styles.controlsCell}>
+                  <TouchableOpacity
+                    style={styles.pointButton}
+                    onPress={addPointsTeamB}
+                  >
+                    <Icon name="plus" size={20} color="#28a745" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.pointButton}
+                    onPress={decrementPointsTeamB}
+                  >
+                    <Icon name="minus" size={20} color="#dc3545" />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
+
+            {/* Sets History */}
+            <View style={styles.setsHistory}>
+              <Text style={styles.sectionTitle}>Sets History</Text>
+              {setHistory.length > 0 ? (
+                <View style={styles.historyTable}>
+                  <View style={styles.historyHeaderRow}>
+                    <Text style={styles.historyHeaderCell}>Set</Text>
+                    <Text style={styles.historyHeaderCell}>
+                      {selectedMatch?.teamA}
+                    </Text>
+                    <Text style={styles.historyHeaderCell}>
+                      {selectedMatch?.teamB}
+                    </Text>
+                  </View>
+                  {setHistory.map((set, index) => (
+                    <View key={index} style={styles.historyRow}>
+                      <Text style={styles.historyCell}>Set {set.set}</Text>
+                      <Text style={styles.historyCell}>{set.scoreA}</Text>
+                      <Text style={styles.historyCell}>{set.scoreB}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.noHistoryText}>No sets completed yet</Text>
+              )}
+            </View>
+
+            {/* Match Controls */}
             <View style={styles.matchControls}>
               <TouchableOpacity
-                style={styles.endSetButton}
+                style={[styles.controlButton, styles.endSetButton]}
                 onPress={handleSetEnd}
               >
-                <Text style={styles.endSetButtonText}>End Set</Text>
+                <Icon name="flag-checkered" size={16} color="#fff" />
+                <Text style={styles.buttonText}>End Set</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.closeButton}
+                style={[styles.controlButton, styles.resetButton]}
+                onPress={resetMatch}
+              >
+                <Icon name="refresh" size={16} color="#fff" />
+                <Text style={styles.buttonText}>Reset</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.controlButton, styles.closeButton]}
                 onPress={closeMatchModal}
               >
-                <Text style={styles.closeButtonText}>Close Match</Text>
+                <Icon name="times" size={16} color="#fff" />
+                <Text style={styles.buttonText}>Close</Text>
               </TouchableOpacity>
             </View>
-            {renderWinners()}
+
+            {matchWinner && (
+              <View style={styles.winnerBanner}>
+                <Icon name="trophy" size={24} color="#FFD700" />
+                <Text style={styles.winnerText}>
+                  Winner:{" "}
+                  {matchWinner === "A"
+                    ? selectedMatch?.teamA
+                    : selectedMatch?.teamB}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -931,7 +1087,7 @@ const matchHistoryStyles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)", // Semi-transparent background
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   modalContent: {
     width: "90%",
@@ -1127,6 +1283,16 @@ const styles = StyleSheet.create({
     margin: 16,
     elevation: 4,
     maxHeight: "80%",
+    position: "relative",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
   },
   modalTitle: {
     fontSize: 24,
@@ -1141,118 +1307,215 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 16,
   },
-  matchTypeIndicator: {
-    backgroundColor: "#f8f9fa",
-    padding: 8,
-    borderRadius: 8,
-    marginBottom: 16,
+  scoreboard: {
+    marginVertical: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    elevation: 2,
   },
-  matchTypeText: {
-    textAlign: "center",
-    color: "#666666",
-    fontWeight: "500",
-  },
-  scoreContainer: {
+  scoreboardHeaderRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 24,
+    backgroundColor: "#f8f9fa",
+    borderBottomWidth: 2,
+    borderBottomColor: "#dee2e6",
+    paddingVertical: 12,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
   },
-  scoreInput: {
+  headerCell: {
     flex: 1,
+    fontSize: 16,
+    fontWeight: "bold",
+    textAlign: "center",
+    color: "#495057",
+  },
+  scoreboardRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#dee2e6",
+    paddingVertical: 12,
     alignItems: "center",
   },
-  scoreDivider: {
-    paddingHorizontal: 16,
+  teamCell: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "500",
+    paddingLeft: 12,
+    color: "#2c3e50",
   },
-  vsText: {
-    fontSize: 18,
+  scoreCell: {
+    flex: 1,
+    fontSize: 24,
     fontWeight: "bold",
-    color: "#666666",
-  },
-  scoreText: {
-    fontSize: 48,
-    fontWeight: "bold",
-    color: "#1a1a1a",
-    marginBottom: 16,
-  },
-  scoreButton: {
-    padding: 12,
-    backgroundColor: "#e7f1ff",
-    borderRadius: 8,
-    width: "100%",
-    marginBottom: 8,
-  },
-  scoreButtonText: {
     textAlign: "center",
     color: "#007bff",
-    fontWeight: "500",
   },
-  setScoreText: {
-    fontSize: 14,
-    color: "#666666",
+  controlsCell: {
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+  },
+  pointButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f8f9fa",
+    borderWidth: 1,
+    borderColor: "#dee2e6",
+    marginHorizontal: 4,
+  },
+  setsHistory: {
+    marginTop: 20,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 5,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  historyTable: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#007AFF",
+    borderRadius: 5,
+  },
+  historyHeaderRow: {
+    flexDirection: "row",
+    backgroundColor: "#f2f2f2",
+    borderBottomWidth: 1,
+    borderBottomColor: "#ddd",
+  },
+  historyHeaderCell: {
+    flex: 1,
+    padding: 10,
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+  historyRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#ddd",
+  },
+  historyCell: {
+    flex: 1,
+    padding: 10,
+    textAlign: "center",
+  },
+  noHistoryText: {
+    textAlign: "center",
+    color: "#888",
   },
   matchControls: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 24,
+    marginTop: 24,
+    padding: 8,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
   },
   endSetButton: {
-    flex: 1,
-    padding: 16,
+    backgroundColor: "#007bff",
+    padding: 12,
     borderRadius: 8,
-    backgroundColor: "#28a745",
+    flex: 1,
+    alignItems: "center",
     marginRight: 8,
+    elevation: 2,
   },
-  endSetButtonText: {
-    color: "#ffffff",
-    fontWeight: "bold",
-    textAlign: "center",
+  resetButton: {
+    backgroundColor: "#dc3545",
+    padding: 12,
+    borderRadius: 8,
+    flex: 1,
+    alignItems: "center",
+    marginHorizontal: 8,
+    elevation: 2,
   },
   closeButton: {
-    flex: 1,
-    padding: 16,
+    backgroundColor: "#6c757d",
+    padding: 12,
     borderRadius: 8,
-    backgroundColor: "#dc3545",
+    flex: 1,
+    alignItems: "center",
     marginLeft: 8,
+    elevation: 2,
   },
-  closeButtonText: {
+  buttonText: {
     color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  winnerText: {
+    fontSize: 20,
     fontWeight: "bold",
     textAlign: "center",
+    marginTop: 24,
+    color: "#28a745",
+    padding: 16,
+    backgroundColor: "#d4edda",
+    borderRadius: 8,
   },
-  historySection: {
-    flex: 1,
-    maxHeight: 200,
-  },
-  historyTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 12,
-    color: "#1a1a1a",
-  },
-  historyContainer: {
-    flex: 1,
-  },
-  historyItem: {
+  addPointsControls: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 20,
     padding: 12,
     backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+  },
+  teamControls: {
+    flexDirection: "column",
+    alignItems: "center",
+    flex: 1,
+    marginHorizontal: 8,
+    backgroundColor: "#ffffff",
+    padding: 12,
     borderRadius: 8,
-    marginBottom: 8,
+    elevation: 1,
   },
-  historyButton: {
-    backgroundColor: "#007BFF",
-    padding: 10,
-    borderRadius: 5,
-    marginTop: 10,
+  addPointsButton: {
+    backgroundColor: "#28a745",
+    padding: 12,
+    borderRadius: 8,
+    width: "100%",
+    alignItems: "center",
+    marginVertical: 4,
+    elevation: 2,
+    flexDirection: "row",
+    justifyContent: "center",
   },
-  historyButtonText: {
-    color: "white",
-    textAlign: "center",
+  addPointsButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    marginLeft: 8,
   },
-  setDetails: {
-    fontSize: 14,
-    marginLeft: 10,
+  teamScoreContainer: {
+    alignItems: "center",
+    marginVertical: 12,
+  },
+  currentScore: {
+    fontSize: 48,
+    fontWeight: "bold",
+    color: "#2c3e50",
+    marginVertical: 8,
+  },
+  teamLabel: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 4,
+  },
+  iconContainer: {
+    marginRight: 8,
   },
 });
 
