@@ -14,7 +14,7 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import config from "./config";
 import { Svg, Line, Text as SvgText, G, Rect } from "react-native-svg";
-import { Picker } from "@react-native-picker/picker";
+import RNPickerSelect from "react-native-picker-select";
 
 const ViewTournament = () => {
   const [managerId, setManagerId] = useState(null);
@@ -111,6 +111,17 @@ const ViewTournament = () => {
     }
   };
 
+  const getMatchStatus = (match) => {
+    if (match.teamA === "BYE" || match.teamB === "BYE") return "bye";
+    if (match.winner) return "completed";
+    if (
+      selectedMatch?.teamA === match.teamA &&
+      selectedMatch?.teamB === match.teamB
+    )
+      return "inProgress";
+    return "pending";
+  };
+
   const generateBrackets = () => {
     if (!teams.length) return;
 
@@ -203,28 +214,16 @@ const ViewTournament = () => {
     }
   }, [teams, tournamentType]);
 
+  // Single Elimination Bracket
   const renderSingleEliminationBracket = () => {
     const svgHeight = Math.max(400, brackets[0]?.length * 100);
     const roundWidth = 150;
 
-    // Define colors for different match states
     const matchColors = {
       pending: "#f8f9fa",
       inProgress: "#fff3cd",
       completed: "#d1e7dd",
       bye: "#e9ecef",
-    };
-
-    // Helper function to determine match status
-    const getMatchStatus = (match) => {
-      if (match.teamA === "BYE" || match.teamB === "BYE") return "bye";
-      if (match.winner) return "completed";
-      if (
-        selectedMatch?.teamA === match.teamA &&
-        selectedMatch?.teamB === match.teamB
-      )
-        return "inProgress";
-      return "pending";
     };
 
     return (
@@ -233,7 +232,6 @@ const ViewTournament = () => {
           <Svg height={svgHeight} width={brackets.length * roundWidth + 50}>
             {brackets.map((round, roundIndex) => (
               <G key={`round-${roundIndex}`}>
-                {/* Add round label */}
                 <SvgText
                   x={roundIndex * roundWidth + 40}
                   y={20}
@@ -247,11 +245,10 @@ const ViewTournament = () => {
                 {round.map((match, matchIndex) => {
                   const yPos =
                     (svgHeight / (round.length + 1)) * (matchIndex + 1);
-                  const matchStatus = getMatchStatus(match);
+                  const matchStatus = getMatchStatus(match); // This should work now
 
                   return (
                     <G key={`match-${roundIndex}-${matchIndex}`}>
-                      {/* Match box with dynamic color based on status */}
                       <Rect
                         x={roundIndex * roundWidth + 10}
                         y={yPos - 20}
@@ -265,7 +262,6 @@ const ViewTournament = () => {
                         rx={4}
                       />
 
-                      {/* Team A name */}
                       <SvgText
                         x={roundIndex * roundWidth + 15}
                         y={yPos - 5}
@@ -280,7 +276,6 @@ const ViewTournament = () => {
                         {match.teamA}
                       </SvgText>
 
-                      {/* Divider line */}
                       <Line
                         x1={roundIndex * roundWidth + 15}
                         y1={yPos}
@@ -290,7 +285,6 @@ const ViewTournament = () => {
                         strokeWidth="1"
                       />
 
-                      {/* Team B name */}
                       <SvgText
                         x={roundIndex * roundWidth + 15}
                         y={yPos + 15}
@@ -305,7 +299,6 @@ const ViewTournament = () => {
                         {match.teamB}
                       </SvgText>
 
-                      {/* Winner indicator */}
                       {match.winner && (
                         <Rect
                           x={roundIndex * roundWidth + 120}
@@ -317,7 +310,6 @@ const ViewTournament = () => {
                         />
                       )}
 
-                      {/* Connection lines to next round */}
                       {roundIndex < brackets.length - 1 && (
                         <Line
                           x1={roundIndex * roundWidth + 130}
@@ -343,6 +335,7 @@ const ViewTournament = () => {
     );
   };
 
+  // Round Robin Bracket
   const renderRoundRobinBracket = () => {
     const cellSize = 40;
     const headerHeight = 30;
@@ -353,7 +346,6 @@ const ViewTournament = () => {
       <ScrollView horizontal>
         <ScrollView>
           <Svg height={svgHeight} width={svgWidth}>
-            {/* Header row */}
             {teams.map((team, index) => (
               <G key={`header-${index}`}>
                 <Rect
@@ -374,7 +366,6 @@ const ViewTournament = () => {
               </G>
             ))}
 
-            {/* Results grid */}
             {teams.map((teamA, rowIndex) =>
               teams.map((teamB, colIndex) => {
                 if (rowIndex !== colIndex) {
@@ -422,8 +413,8 @@ const ViewTournament = () => {
     );
   };
 
+  // Expedition Bracket (Combination of Round Robin + Single Elimination)
   const renderExpeditionBracket = () => {
-    // Combine round robin and single elimination visualization
     return (
       <View>
         <Text style={styles.bracketTitle}>Group Stage (Round Robin)</Text>
@@ -447,19 +438,47 @@ const ViewTournament = () => {
     }
   };
 
+  // Reset scores for the next set
   const resetScores = () => {
     setScoreTeamA(0);
     setScoreTeamB(0);
-    setSetScoreA([0, 0, 0, 0, 0]); // Reset set scores
-    setSetScoreB([0, 0, 0, 0, 0]);
-    setSetCount(1); // Reset to the first set
   };
 
+  // Score update function for singles match
   const handleScoreUpdate = (team) => {
     if (team === "A") {
+      // Increment score for Team A
       setScoreTeamA((prev) => prev + 1);
-    } else {
+
+      // Check if Team A has won the set
+      if (scoreTeamA >= 11 && scoreTeamA - scoreTeamB >= 2) {
+        handleSetWin("A");
+      }
+    } else if (team === "B") {
+      // Increment score for Team B
       setScoreTeamB((prev) => prev + 1);
+
+      // Check if Team B has won the set
+      if (scoreTeamB >= 11 && scoreTeamB - scoreTeamA >= 2) {
+        handleSetWin("B");
+      }
+    }
+  };
+
+  // Handle set win for singles
+  const handleSetWin = (winningTeam) => {
+    if (winningTeam === "A") {
+      setScoreA((prev) => {
+        const newScore = [...prev, scoreTeamA];
+        resetScores(); // Reset scores for the next set
+        return newScore;
+      });
+    } else if (winningTeam === "B") {
+      setScoreB((prev) => {
+        const newScore = [...prev, scoreTeamB];
+        resetScores(); // Reset scores for the next set
+        return newScore;
+      });
     }
   };
 
@@ -624,14 +643,14 @@ const ViewTournament = () => {
     const updatedBrackets = [...brackets];
     const currentRoundMatches = updatedBrackets[currentRound - 1];
 
-    // Find the match index in the current round
+    // Find the index of the current match in the round
     const matchIndex = currentRoundMatches.findIndex(
       (match) =>
         match.teamA === selectedMatch.teamA &&
         match.teamB === selectedMatch.teamB
     );
 
-    // Update the winner
+    // Update the winner in the current match
     currentRoundMatches[matchIndex].winner = winner.name;
 
     // If there's a next round, update the advancing team
@@ -640,6 +659,7 @@ const ViewTournament = () => {
       const isFirstTeam = matchIndex % 2 === 0;
       const nextRoundMatch = updatedBrackets[currentRound][nextRoundIndex];
 
+      // Assign the winning team to the correct slot in the next round
       if (isFirstTeam) {
         nextRoundMatch.teamA = winner.name;
       } else {
@@ -647,7 +667,7 @@ const ViewTournament = () => {
       }
     }
 
-    setBrackets(updatedBrackets);
+    setBrackets(updatedBrackets); // Update the state with the modified brackets
   };
 
   const checkRoundCompletion = () => {
@@ -724,24 +744,26 @@ const ViewTournament = () => {
     </TouchableOpacity>
   );
 
-  const renderMatchup = (teamA, teamB) => (
-    <View style={styles.matchupContainer}>
-      <TouchableOpacity
-        style={[
-          styles.matchupButton,
-          selectedMatch?.teamA === teamA.name &&
-          selectedMatch?.teamB === teamB.name
-            ? styles.selectedMatch
-            : null,
-        ]}
-        onPress={() => selectMatch(teamA.name, teamB.name)}
-      >
-        <Text style={styles.matchupText}>
-          {teamA.name} vs {teamB.name}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
+  const renderMatchup = (match) => {
+    const matchStatus = getMatchStatus(match); // Get match status here
+    const { teamA, teamB } = match; // Destructure teamA and teamB from the match object
+
+    return (
+      <View style={styles.matchupContainer}>
+        <TouchableOpacity
+          style={[
+            styles.matchupButton,
+            matchStatus === "inProgress" ? styles.selectedMatch : null,
+          ]}
+          onPress={() => selectMatch(teamA, teamB)} // Use team names directly
+        >
+          <Text style={styles.matchupText}>
+            {teamA} vs {teamB}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   const renderBracket = () => {
     switch (tournamentType) {
@@ -756,86 +778,6 @@ const ViewTournament = () => {
     }
   };
 
-  const openMatchHistoryModal = (match) => {
-    setSelectedMatch(match); // Set the selected match data
-    setMatchHistoryVisible(true); // Open the modal
-  };
-
-  const renderMatchHistory = () => {
-    if (!selectedMatch) return null; // Ensure there's a selected match
-
-    return (
-      <View style={matchHistoryStyles.matchHistoryContainer}>
-        <View style={matchHistoryStyles.matchDetailRow}>
-          <Text style={matchHistoryStyles.matchDetailLabel}>Match:</Text>
-          <Text style={matchHistoryStyles.matchDetailValue}>
-            {selectedMatch.teamA} vs {selectedMatch.teamB}
-          </Text>
-        </View>
-        <View style={matchHistoryStyles.matchDetailRow}>
-          <Text style={matchHistoryStyles.matchDetailLabel}>Match Type:</Text>
-          <Text style={matchHistoryStyles.matchDetailValue}>
-            {selectedMatch.matchType}
-          </Text>
-        </View>
-
-        {/* Display individual sets */}
-        {selectedMatch.sets && selectedMatch.sets.length > 0 ? (
-          selectedMatch.sets.map((set, setIndex) => (
-            <View key={setIndex} style={matchHistoryStyles.setDetailRow}>
-              <Text style={matchHistoryStyles.setDetailText}>
-                Set {setIndex + 1}: {set.scoreA} - {set.scoreB} | Winner:{" "}
-                {set.winner}
-              </Text>
-            </View>
-          ))
-        ) : (
-          <Text style={matchHistoryStyles.noSetsText}>
-            No sets recorded for this match.
-          </Text>
-        )}
-
-        <View style={matchHistoryStyles.matchDetailRow}>
-          <Text style={matchHistoryStyles.matchDetailLabel}>Winner:</Text>
-          <Text style={matchHistoryStyles.matchDetailValue}>
-            {selectedMatch.winner}
-          </Text>
-        </View>
-        <View style={matchHistoryStyles.matchDetailRow}>
-          <Text style={matchHistoryStyles.matchDetailLabel}>Loser:</Text>
-          <Text style={matchHistoryStyles.matchDetailValue}>
-            {selectedMatch.winner === selectedMatch.teamA
-              ? selectedMatch.teamB
-              : selectedMatch.teamA}
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
-  const renderMatchHistoryModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={isMatchHistoryVisible}
-      onRequestClose={() => setMatchHistoryVisible(false)}
-    >
-      <View style={matchHistoryStyles.modalOverlay}>
-        <View style={matchHistoryStyles.modalContent}>
-          <Text style={matchHistoryStyles.modalTitle}>Match History</Text>
-          <ScrollView>{renderMatchHistory()}</ScrollView>
-          <TouchableOpacity
-            style={matchHistoryStyles.closeButton}
-            onPress={() => setMatchHistoryVisible(false)}
-          >
-            <Text style={matchHistoryStyles.closeButtonText}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // Render function
   return (
     <View style={styles.container}>
       {loading ? (
@@ -853,34 +795,40 @@ const ViewTournament = () => {
             <>
               <View style={styles.tournamentConfigSection}>
                 <Text style={styles.title}>Tournament Configuration</Text>
+
                 <View style={styles.pickerContainer}>
                   <Text style={styles.pickerLabel}>Tournament Type:</Text>
-                  <Picker
-                    selectedValue={tournamentType}
+                  <RNPickerSelect
                     onValueChange={(value) => setTournamentType(value)}
-                    style={styles.picker}
-                  >
-                    <Picker.Item
-                      label="Single Elimination"
-                      value="Single Elimination"
-                    />
-                    <Picker.Item label="Round Robin" value="Round Robin" />
-                    <Picker.Item label="Expedition" value="Expedition" />
-                  </Picker>
+                    items={[
+                      {
+                        label: "Single Elimination",
+                        value: "Single Elimination",
+                      },
+                      { label: "Round Robin", value: "Round Robin" },
+                      { label: "Expedition", value: "Expedition" },
+                    ]}
+                    style={pickerSelectStyles}
+                    placeholder={{ label: "Select a type...", value: null }}
+                    value={tournamentType}
+                  />
                 </View>
+
                 <View style={styles.pickerContainer}>
                   <Text style={styles.pickerLabel}>Match Type:</Text>
-                  <Picker
-                    selectedValue={matchType}
+                  <RNPickerSelect
                     onValueChange={(value) => setMatchType(value)}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="Singles (Best of 7)" value="Singles" />
-                    <Picker.Item
-                      label="Team (4 Singles + 1 Doubles)"
-                      value="Team"
-                    />
-                  </Picker>
+                    items={[
+                      { label: "Singles (Best of 7)", value: "Singles" },
+                      { label: "Team (4 Singles + 1 Doubles)", value: "Team" },
+                    ]}
+                    style={pickerSelectStyles}
+                    placeholder={{
+                      label: "Select a match type...",
+                      value: null,
+                    }}
+                    value={matchType}
+                  />
                 </View>
               </View>
 
@@ -892,14 +840,9 @@ const ViewTournament = () => {
               <View style={styles.matchupsSection}>
                 <Text style={styles.title}>Current Matchups:</Text>
                 <FlatList
-                  data={teams}
-                  renderItem={({ item }) =>
-                    renderMatchup(
-                      item,
-                      teams[(teams.indexOf(item) + 1) % teams.length]
-                    )
-                  }
-                  keyExtractor={(item) => item._id}
+                  data={brackets[0]} // Get the first round of matches dynamically
+                  renderItem={({ item }) => renderMatchup(item)} // Pass the entire match object
+                  keyExtractor={(item) => `${item.teamA}-${item.teamB}`} // Use team names as key
                   contentContainerStyle={styles.matchupList}
                   showsVerticalScrollIndicator={false}
                 />
@@ -909,24 +852,11 @@ const ViewTournament = () => {
                 >
                   <Text style={styles.startButtonText}>Start Match</Text>
                 </TouchableOpacity>
-
-                <View style={styles.container}>
-                  <TouchableOpacity
-                    style={styles.historyButton}
-                    onPress={() => openMatchHistoryModal(selectedMatch)}
-                  >
-                    <Text style={styles.historyButtonText}>
-                      Show Match History
-                    </Text>
-                  </TouchableOpacity>
-                </View>
               </View>
             </>
           )}
         </ScrollView>
       )}
-
-      {renderMatchHistoryModal()}
 
       <Modal
         animationType="slide"
@@ -1323,6 +1253,29 @@ const styles = StyleSheet.create({
   setDetails: {
     fontSize: 14,
     marginLeft: 10,
+  },
+});
+
+const pickerSelectStyles = StyleSheet.create({
+  inputIOS: {
+    fontSize: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "gray",
+    borderRadius: 4,
+    color: "black",
+    paddingRight: 30,
+  },
+  inputAndroid: {
+    fontSize: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 0.5,
+    borderColor: "gray",
+    borderRadius: 8,
+    color: "black",
+    paddingRight: 30,
   },
 });
 
