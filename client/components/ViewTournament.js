@@ -48,10 +48,15 @@ const ViewTournament = () => {
   const [currentSet, setCurrentSet] = useState(1);
   const [setScores, setSetScores] = useState([]);
 
-  const matchTypeOptions = [
-    { label: "Singles (Best of 7)", value: "Singles" },
-    { label: "Team (4 Singles + 1 Doubles)", value: "Team" },
-  ];
+  // Function to open the match history modal
+  const showMatchHistory = () => {
+    setMatchHistoryVisible(true);
+  };
+
+  // Function to close the match history modal
+  const closeMatchHistoryModal = () => {
+    setMatchHistoryVisible(false);
+  };
 
   // Handle timer logic
   useEffect(() => {
@@ -887,8 +892,9 @@ const ViewTournament = () => {
                   <RNPickerSelect
                     onValueChange={(value) => setMatchType(value)}
                     items={[
-                      { label: "Singles (Best of 7)", value: "Singles" },
-                      { label: "Team (4 Singles + 1 Doubles)", value: "Team" },
+                      { label: "Singles (Best of 5 or 7)", value: "Singles" },
+                      { label: "Team (Best of 5 Matches)", value: "Team" },
+                      { label: "Mixed Doubles", value: "MixedDoubles" },
                     ]}
                     style={pickerSelectStyles}
                     placeholder={{
@@ -918,6 +924,25 @@ const ViewTournament = () => {
                     onPress={handleMatchStart}
                   >
                     <Text style={styles.startButtonText}>Start Match</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.matchHistorySection}>
+                  <Text style={styles.title}>Match History:</Text>
+                  <FlatList
+                    data={matchHistory} // Replace with your match history data
+                    renderItem={({ item }) => renderMatchHistoryItem(item)} // Pass the match history item
+                    keyExtractor={(item) => `match-${item.game}`} // Use game number as key
+                    contentContainerStyle={styles.historyList}
+                    showsVerticalScrollIndicator={false}
+                  />
+                  <TouchableOpacity
+                    style={styles.showHistoryButton}
+                    onPress={showMatchHistory} // Function to show match history modal
+                  >
+                    <Text style={styles.showHistoryButtonText}>
+                      Show Match History
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>

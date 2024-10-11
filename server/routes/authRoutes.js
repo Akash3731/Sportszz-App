@@ -154,7 +154,7 @@ router.post("/managers", async (req, res) => {
     await newManager.save();
 
     // Update login link for development environment using Expo deep link
-    const loginLink = `exp://192.168.0.173:8081/--/manager-login`;
+    const loginLink = `exp://192.168.1.15:8081/--/manager-login`;
 
     // Sending the email with credentials
     const mailOptions = {
@@ -174,6 +174,46 @@ router.post("/managers", async (req, res) => {
     console.error("Error adding manager or sending email:", error);
     res.status(500).json({
       error: "An error occurred while adding the manager or sending the email.",
+    });
+  }
+});
+
+// Route to resend login credentials to an existing manager
+router.post("/resend-manager-credentials", async (req, res) => {
+  const { email } = req.body;
+
+  // Validate input
+  if (!email) {
+    return res.status(400).json({ error: "Email is required." });
+  }
+
+  try {
+    // Check if a manager with the given email exists
+    const manager = await Manager.findOne({ email });
+    if (!manager) {
+      return res.status(404).json({ error: "Manager not found." });
+    }
+
+    // If manager exists, prepare the email with login credentials
+    const loginLink = `exp://192.168.1.15:8081/--/manager-login`;
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Resend Manager Login Details",
+      text: `Hello ${manager.name},\n\nHere are your login details for Sportszz:\n\nEmail: ${email}\nClick the link below to log in:\n${loginLink}\n\nThank you,\nSportszz Team`,
+    };
+
+    // Send the email
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({
+      message: "Login credentials resent to the manager's email.",
+    });
+  } catch (error) {
+    console.error("Error resending login credentials:", error);
+    res.status(500).json({
+      error: "An error occurred while resending the login credentials.",
     });
   }
 });
@@ -569,12 +609,10 @@ router.post(
       }, 0);
 
       if (totalPlayers >= 64) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "Cannot add more players. The tournament allows a maximum of 64 players.",
-          });
+        return res.status(400).json({
+          message:
+            "Cannot add more players. The tournament allows a maximum of 64 players.",
+        });
       }
 
       const player = new Player({ name, position });

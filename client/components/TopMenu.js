@@ -127,6 +127,20 @@ const TopMenu = () => {
     }
   };
 
+  const handleResendCredentials = async (email) => {
+    try {
+      const response = await axios.post(
+        `${config.backendUrl}/resend-manager-credentials`,
+        { email }
+      );
+      console.log(response.data.message);
+      alert("Credentials have been resent to the manager.");
+    } catch (error) {
+      console.error("Error resending credentials:", error);
+      alert("An error occurred while resending credentials.");
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.logo}>Sportszz</Text>
@@ -263,6 +277,14 @@ const TopMenu = () => {
                       Status: {manager.isActive ? "Active" : "Inactive"}
                     </Text>
 
+                    {/* Resend Credentials Button */}
+                    <TouchableOpacity
+                      onPress={() => handleResendCredentials(manager.email)}
+                      style={styles.resendButton}
+                    >
+                      <Text style={styles.buttonText}>Resend Credentials</Text>
+                    </TouchableOpacity>
+
                     {/* Activate/Deactivate Button */}
                     <TouchableOpacity
                       onPress={() =>
@@ -395,6 +417,12 @@ const styles = StyleSheet.create({
   },
   managerText: {
     fontSize: 16,
+  },
+  resendButton: {
+    backgroundColor: "#2196F3",
+    padding: 8,
+    borderRadius: 5,
+    marginVertical: 5,
   },
   buttonBase: {
     paddingVertical: 8,
