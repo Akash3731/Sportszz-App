@@ -35,28 +35,26 @@ const ManageTeams = () => {
   const [teamNames, setTeamNames] = useState({});
   const [positions, setPositions] = useState({});
   const [managerId, setManagerId] = useState(null);
+  const [totalPlayers, setTotalPlayers] = useState(0);
 
   const fetchManagerId = async () => {
     try {
       setLoading(true);
       console.log("Fetching manager ID...");
 
-      // Get the manager ID from local storage or state
-      const managerId = await AsyncStorage.getItem("manager-id"); // Assuming you're storing manager ID in AsyncStorage
+      const managerId = await AsyncStorage.getItem("manager-id");
       console.log("Retrieved manager ID from AsyncStorage:", managerId);
 
-      // If managerId is not found, handle accordingly
       if (!managerId) {
         Alert.alert("Error", "No manager logged in. Please log in again.");
         console.warn("No manager ID found, user not logged in.");
         return;
       }
 
-      // Make a GET request to fetch the current manager using the new endpoint
       console.log("Making request to fetch manager data...");
       const response = await axios.get(`${config.backendUrl}/managers/me`, {
         headers: {
-          "manager-id": managerId, // Pass the manager ID in the headers
+          "manager-id": managerId,
         },
       });
       console.log("Response received from server:", response.data);
@@ -173,10 +171,9 @@ const ManageTeams = () => {
   };
 
   const addTeam = async (groupId) => {
-    const teamName = teamNames[groupId]; // Get the team name for the specific group
+    const teamName = teamNames[groupId];
     const group = groups.find((g) => g._id === groupId);
 
-    // Check if maximum teams are reached
     if (group.teams.length >= 4) {
       Alert.alert(
         "Limit Reached",
@@ -290,20 +287,32 @@ const ManageTeams = () => {
   };
 
   const addPlayer = async (groupId, teamId) => {
-    const playerName = playerNames[teamId]; // Get the player name for the specific team
-    const position = positions[teamId]; // Get the position for the specific team
+    const playerName = playerNames[teamId];
+    const position = positions[teamId];
 
-    // Validate input
+    console.log(
+      `Preparing to add player to group: ${groupId}, team: ${teamId}`
+    );
+    console.log(`Player name: ${playerName}, position: ${position}`);
+
     if (!playerName.trim() || !position) {
+      console.log("Validation failed: Missing player name or position");
       Alert.alert("Error", "Please enter player name and select position");
       return;
     }
 
-    // Check total players and team player limits
     const team = groups
       .find((group) => group._id === groupId)
       .teams.find((team) => team._id === teamId);
+
+    console.log(
+      `Current team: ${team.name}, current number of players: ${team.players.length}`
+    );
+
     if (totalPlayers >= 64) {
+      console.log(
+        "Player limit reached: Tournament max of 64 players reached."
+      );
       Alert.alert(
         "Limit Reached",
         "Cannot add more players. The tournament allows a maximum of 64 players."
@@ -311,15 +320,21 @@ const ManageTeams = () => {
       return;
     }
     if (team.players.length >= 4) {
+      console.log(
+        "Team player limit reached: This team already has 4 players."
+      );
       Alert.alert("Limit Reached", "This team already has 4 players.");
       return;
     }
 
     try {
+      console.log(`Sending request to server to add player to team: ${teamId}`);
       const response = await axios.post(
         `${config.backendUrl}/managers/${managerId}/groups/${groupId}/teams/${teamId}/players`,
         { name: playerName.trim(), position }
       );
+
+      console.log("Player added successfully:", response.data);
 
       setGroups((prevGroups) =>
         prevGroups.map((group) =>
@@ -335,9 +350,9 @@ const ManageTeams = () => {
             : group
         )
       );
-      setPlayerNames((prev) => ({ ...prev, [teamId]: "" })); // Clear input after adding
-      setPositions((prev) => ({ ...prev, [teamId]: null })); // Reset position after adding
-      setTotalPlayers((prev) => prev + 1); // Increment total players count
+      setPlayerNames((prev) => ({ ...prev, [teamId]: "" }));
+      setPositions((prev) => ({ ...prev, [teamId]: null }));
+      setTotalPlayers((prev) => prev + 1);
       Alert.alert("Success", "Player added successfully");
     } catch (error) {
       console.error("Error adding player:", error);
@@ -472,7 +487,7 @@ const ManageTeams = () => {
 
   const CustomButton = ({ title, onPress, color = "#007AFF" }) => (
     <TouchableOpacity
-      style={[customButtonStyles.button, { backgroundColor: color }]} // Ensure this is applied correctly
+      style={[customButtonStyles.button, { backgroundColor: color }]}
       onPress={onPress}
     >
       <Text style={customButtonStyles.buttonText}>{title}</Text>
@@ -481,7 +496,7 @@ const ManageTeams = () => {
 
   const customButtonStyles = StyleSheet.create({
     button: {
-      width: 80, // Set a fixed width for testing
+      width: 80,
       height: 28,
       borderRadius: 4,
       justifyContent: "center",
@@ -535,14 +550,14 @@ const ManageTeams = () => {
       <View style={styles.inputContainer}>
         <TextInput
           style={commonStyles.input}
-          value={playerNames[team._id] || ""} // Bind to specific player name
-          onChangeText={(name) => handlePlayerNameChange(team._id, name)} // Handle input changes
+          value={playerNames[team._id] || ""}
+          onChangeText={(name) => handlePlayerNameChange(team._id, name)}
           placeholder="Add new player"
           placeholderTextColor="#8E8E93"
         />
         <RNPickerSelect
-          onValueChange={(value) => handlePositionChange(team._id, value)} // Handle position change
-          value={positions[team._id] || null} // Bind to specific position
+          onValueChange={(value) => handlePositionChange(team._id, value)}
+          value={positions[team._id] || null}
           placeholder={{ label: "Position", value: null }}
           items={[
             { label: "Player", value: "Player" },
@@ -553,7 +568,7 @@ const ManageTeams = () => {
         />
         <CustomButton
           title="Add Player"
-          onPress={() => addPlayer(groupId, team._id)} // Pass the correct team ID
+          onPress={() => addPlayer(groupId, team._id)}
         />
       </View>
       <FlatList
@@ -594,14 +609,14 @@ const ManageTeams = () => {
   const handlePlayerNameChange = (teamId, name) => {
     setPlayerNames((prev) => ({
       ...prev,
-      [teamId]: name, // Store player name for specific team
+      [teamId]: name,
     }));
   };
 
   const handlePositionChange = (teamId, value) => {
     setPositions((prev) => ({
       ...prev,
-      [teamId]: value, // Store position for specific team
+      [teamId]: value,
     }));
   };
 
@@ -611,23 +626,23 @@ const ManageTeams = () => {
       <View style={styles.inputContainer}>
         <TextInput
           style={commonStyles.input}
-          value={teamNames[group._id] || ""} // Bind input to specific team name
-          onChangeText={(name) => handleTeamNameChange(group._id, name)} // Handle input changes
+          value={teamNames[group._id] || ""}
+          onChangeText={(name) => handleTeamNameChange(group._id, name)}
           placeholder="Add new team"
           placeholderTextColor="#8E8E93"
         />
         <CustomButton
           title="Add Team"
           onPress={() => {
-            const teamName = teamNames[group._id]; // Get the team name from state
+            const teamName = teamNames[group._id];
             console.log("Team Name:", teamName);
             console.log("Team Name before condition:", teamNames[group._id]);
 
             // Only add team if the input is not empty
             if (teamName && teamName.trim() !== "") {
               console.log("Adding team:", teamName);
-              addTeam(group._id, teamName); // Pass team name here
-              handleTeamNameChange(group._id, ""); // Clear input after adding
+              addTeam(group._id, teamName);
+              handleTeamNameChange(group._id, "");
             } else {
               console.log("Team name is empty.");
               Alert.alert("Please enter a team name.");
@@ -766,18 +781,18 @@ const colors = {
   red: "#FF3B30",
   lightBackground: "#F8F8F8",
   textGray: "#8E8E93",
-  shadowColor: "rgba(0, 0, 0, 0.1)", // For better shadow effects
+  shadowColor: "rgba(0, 0, 0, 0.1)",
 };
 
 // Common Sizes
 const sizes = {
   borderRadius: 12,
   smallBorderRadius: 6,
-  inputHeight: 48, // Slightly taller input for better usability
-  buttonHeight: 40, // Increased button height for touch friendliness
+  inputHeight: 48,
+  buttonHeight: 40,
   mainFontSize: 16,
   smallFontSize: 14,
-  headerFontSize: 26, // Larger header font for emphasis
+  headerFontSize: 26,
   subHeaderFontSize: 22,
 };
 
@@ -791,21 +806,21 @@ const commonStyles = {
     borderWidth: 1,
     borderColor: colors.darkGray,
     fontSize: sizes.mainFontSize,
-    marginVertical: 8, // Increased margin for better spacing
+    marginVertical: 8,
     shadowColor: colors.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
-    elevation: 2, // Added elevation for Android
+    elevation: 2,
   },
   button: {
     height: sizes.buttonHeight,
     borderRadius: sizes.smallBorderRadius,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 12, // Adjusted padding for better touch area
+    paddingHorizontal: 12,
     marginHorizontal: 4,
-    backgroundColor: colors.blue, // Default button color
+    backgroundColor: colors.blue,
     shadowColor: colors.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -822,7 +837,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    padding: 16, // Added padding for better content spacing
+    padding: 16,
   },
   header: {
     padding: 16,
@@ -860,7 +875,7 @@ const styles = StyleSheet.create({
   },
   groupName: {
     fontSize: sizes.headerFontSize,
-    fontWeight: "700", // Bolder for emphasis
+    fontWeight: "700",
     marginBottom: 12,
   },
   teamCard: {

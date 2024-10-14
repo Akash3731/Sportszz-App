@@ -154,7 +154,7 @@ router.post("/managers", async (req, res) => {
     await newManager.save();
 
     // Update login link for development environment using Expo deep link
-    const loginLink = `exp://192.168.1.15:8081/--/manager-login`;
+    const loginLink = `exp://192.168.0.173:8081/--/manager-login`;
 
     // Sending the email with credentials
     const mailOptions = {
@@ -195,7 +195,7 @@ router.post("/resend-manager-credentials", async (req, res) => {
     }
 
     // If manager exists, prepare the email with login credentials
-    const loginLink = `exp://192.168.1.15:8081/--/manager-login`;
+    const loginLink = `exp://192.168.0.173:8081/--/manager-login`;
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
@@ -567,7 +567,7 @@ router.delete(
   }
 );
 
-// Player Routes
+// Create Player
 // Create Player
 router.post(
   "/managers/:managerId/groups/:groupId/teams/:teamId/players",
@@ -577,49 +577,63 @@ router.post(
       const { name, position } = req.body;
 
       console.log(
-        `Received request to create player for manager: ${managerId}, group: ${groupId}, team: ${teamId}, player name: ${name}`
+        `Received request to create player for manager: ${managerId}, group: ${groupId}, team: ${teamId}, player name: ${name}, position: ${position}`
       );
 
+      // Fetch manager by ID and verify existence
       const manager = await Manager.findById(managerId);
       if (!manager) {
-        console.log("Manager not found");
+        console.log(`Manager not found with ID: ${managerId}`);
         return res.status(404).json({ message: "Manager not found" });
       }
+      console.log(`Manager found: ${manager.name}`);
 
+      // Locate the group and verify
       const group = manager.groups.id(groupId);
       if (!group) {
-        console.log("Group not found");
+        console.log(`Group not found with ID: ${groupId}`);
         return res.status(404).json({ message: "Group not found" });
       }
+      console.log(`Group found: ${group.name}`);
 
+      // Locate the team and verify
       const team = group.teams.id(teamId);
       if (!team) {
-        console.log("Team not found");
+        console.log(`Team not found with ID: ${teamId}`);
         return res.status(404).json({ message: "Team not found" });
       }
+      console.log(`Team found: ${team.name}`);
 
       // Check the total number of players in all teams
       const totalPlayers = manager.groups.reduce((total, group) => {
         return (
           total +
-          group.teams.reduce((teamTotal, team) => {
-            return teamTotal + team.players.length;
+          (group.teams || []).reduce((teamTotal, team) => {
+            return teamTotal + (team.players ? team.players.length : 0);
           }, 0)
         );
       }, 0);
 
+      console.log(`Total players across all teams: ${totalPlayers}`);
+
       if (totalPlayers >= 64) {
+        console.log(
+          "Player limit reached: The tournament allows a maximum of 64 players."
+        );
         return res.status(400).json({
           message:
             "Cannot add more players. The tournament allows a maximum of 64 players.",
         });
       }
 
+      // Create and add new player
       const player = new Player({ name, position });
       team.players.push(player);
       await manager.save();
 
-      console.log("Player created successfully:", player);
+      console.log(
+        `Player ${player.name} created successfully for team ${team.name}`
+      );
       res.status(201).json(player);
     } catch (error) {
       console.error("Error creating player:", error);

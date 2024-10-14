@@ -51,24 +51,41 @@ const ViewTournament = () => {
   const [filterByTeam, setFilterByTeam] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortCriteria, setSortCriteria] = useState("date");
-  const [filteredMatchHistory, setFilteredMatchHistory] =
-    useState(matchHistory);
+  const [filteredMatchHistory, setFilteredMatchHistory] = useState([]);
 
   useEffect(() => {
-    filterMatches();
-  }, [searchQuery, filterByTeam, sortCriteria, matchHistory]);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const groupsResponse = await fetch(
+          `${config.backendUrl}/groups/${managerId}`
+        );
+        const teamsResponse = await fetch(
+          `${config.backendUrl}/teams/${managerId}`
+        );
+        const matchHistoryResponse = await fetch(
+          `${config.backendUrl}/matchHistory/${managerId}`
+        );
 
-  const filterMatches = () => {
+        const groupsData = await groupsResponse.json();
+        const teamsData = await teamsResponse.json();
+        const matchHistoryData = await matchHistoryResponse.json();
+
+        setGroups(groupsData);
+        setTeams(teamsData);
+        setMatchHistory(matchHistoryData);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  useEffect(() => {
     let filteredData = matchHistory;
-
-    // Filter by search query
-    if (searchQuery) {
-      filteredData = filteredData.filter(
-        (match) =>
-          match.teamA.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          match.teamB.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
 
     // Filter by team
     if (filterByTeam) {
@@ -77,15 +94,17 @@ const ViewTournament = () => {
       );
     }
 
-    // Sort matches
-    if (sortCriteria === "date") {
-      filteredData.sort((a, b) => new Date(b.date) - new Date(a.date)); // Assuming date is a property in match
-    } else if (sortCriteria === "sets") {
-      filteredData.sort((a, b) => b.numberOfSets - a.numberOfSets);
+    // Filter by search query
+    if (searchQuery) {
+      filteredData = filteredData.filter((match) =>
+        `${match.teamA} vs ${match.teamB}`
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase())
+      );
     }
 
     setFilteredMatchHistory(filteredData);
-  };
+  }, [matchHistory, searchQuery, filterByTeam]);
 
   // Function to open the match history modal
   const showMatchHistory = () => {
@@ -1152,109 +1171,13 @@ const ViewTournament = () => {
         <View style={matchHistoryStyles.modalOverlay}>
           <View style={matchHistoryStyles.modalContent}>
             {/* Modal Title */}
-            <Text style={matchHistoryStyles.modalTitle}>
-              <Icon name="history" size={24} color="#007AFF" /> Match History
-            </Text>
-
-            {/* Search Bar */}
-            <TextInput
-              style={matchHistoryStyles.searchBar}
-              placeholder="Search for a match..."
-              placeholderTextColor="#a1a1a1" // Placeholder color
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-
-            {/* Filter by Team */}
-            <View style={matchHistoryStyles.filterSection}>
-              <Text style={matchHistoryStyles.sectionTitle}>
-                <Icon name="filter" size={18} color="#007AFF" /> Filter by Team:
-              </Text>
-              <RNPickerSelect
-                onValueChange={(value) => setFilterByTeam(value)}
-                items={[
-                  { label: "All Teams", value: null },
-                  { label: "Team A", value: "Team A" },
-                  { label: "Team B", value: "Team B" },
-                  // Add more teams as needed
-                ]}
-                value={filterByTeam}
-                style={pickerSelectStyles}
-                placeholder={{ label: "Select Team", value: null }}
-              />
-            </View>
-
-            {/* Sort Matches */}
-            <View style={matchHistoryStyles.sortSection}>
-              <Text style={matchHistoryStyles.sectionTitle}>
-                <Icon name="sort" size={18} color="#007AFF" /> Sort by:
-              </Text>
-              <RNPickerSelect
-                onValueChange={(value) => setSortCriteria(value)}
-                items={[
-                  { label: "Date", value: "date" },
-                  { label: "Number of Sets", value: "sets" },
-                ]}
-                value={sortCriteria}
-                style={pickerSelectStyles}
-                placeholder={{ label: "Sort Matches", value: null }}
-              />
-            </View>
+            <Text style={matchHistoryStyles.modalTitle}>Match History</Text>
 
             {/* Match History List */}
             <FlatList
-              data={filteredMatchHistory}
-              keyExtractor={(item, index) => `match-${index}`}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={matchHistoryStyles.matchHistoryContainer}
-                >
-                  <View style={matchHistoryStyles.matchDetailRow}>
-                    <Text style={matchHistoryStyles.matchDetailLabel}>
-                      <Icon name="users" size={18} color="#007AFF" /> Teams:
-                    </Text>
-                    <Text style={matchHistoryStyles.matchDetailValue}>
-                      {`${item.teamA} vs ${item.teamB}`}
-                    </Text>
-                  </View>
-                  <View style={matchHistoryStyles.matchDetailRow}>
-                    <Text style={matchHistoryStyles.matchDetailLabel}>
-                      <Icon name="trophy" size={18} color="#007AFF" /> Winner:
-                    </Text>
-                    <Text style={matchHistoryStyles.matchDetailValue}>
-                      {item.winner}
-                    </Text>
-                  </View>
-                  <View style={matchHistoryStyles.matchDetailRow}>
-                    <Text style={matchHistoryStyles.matchDetailLabel}>
-                      <Icon name="list-alt" size={18} color="#007AFF" /> Number
-                      of Sets:
-                    </Text>
-                    <Text style={matchHistoryStyles.matchDetailValue}>
-                      {item.numberOfSets}
-                    </Text>
-                  </View>
-                  {/* Sets History */}
-                  {item.sets.map((set, index) => (
-                    <View key={index} style={matchHistoryStyles.setDetailRow}>
-                      <Text
-                        style={matchHistoryStyles.setDetailText}
-                      >{`Set ${set.set}`}</Text>
-                      <Text
-                        style={matchHistoryStyles.setDetailText}
-                      >{`${item.teamA}: ${set.team1Points}`}</Text>
-                      <Text
-                        style={matchHistoryStyles.setDetailText}
-                      >{`${item.teamB}: ${set.team2Points}`}</Text>
-                    </View>
-                  ))}
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <Text style={matchHistoryStyles.emptyListText}>
-                  No match history available
-                </Text>
-              }
+              data={matchHistory}
+              renderItem={({ item }) => renderMatchHistoryItem(item)}
+              keyExtractor={(item) => `history-${item.id}`} // Unique key for each history item
             />
 
             {/* Close Button */}
