@@ -29,10 +29,10 @@ const ViewTournament = () => {
   const [teams, setTeams] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [setCount, setSetCount] = useState(1);
-  const [winners, setWinners] = useState([]);
+
   const [matchHistory, setMatchHistory] = useState([]);
   const [matchType, setMatchType] = useState(null);
-  const [tournamentType, setTournamentType] = useState("Single Elimination");
+  const [tournamentType, setTournamentType] = useState("");
   const [roundRobinResults, setRoundRobinResults] = useState({});
   const [currentRound, setCurrentRound] = useState(1);
   const [brackets, setBrackets] = useState([]);
@@ -43,91 +43,18 @@ const ViewTournament = () => {
   const [setScoreB, setSetScoreB] = useState([]);
   const [numOfSets, setNumOfSets] = useState(null);
   const [matchWinner, setMatchWinner] = useState(null);
-  const [timer, setTimer] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
   const [setHistory, setSetHistory] = useState([]);
+  const [winners, setWinners] = useState([]);
+  const [losers, setLosers] = useState([]);
+  const [setsWonByTeamA, setSetsWonByTeamA] = useState(0);
+  const [setsWonByTeamB, setSetsWonByTeamB] = useState(0);
+
+  {
+    /*For tracking sets and points */
+  }
+  const [teamASetPoints, setTeamASetPoints] = useState([]);
+  const [teamBSetPoints, setTeamBSetPoints] = useState([]);
   const [currentSet, setCurrentSet] = useState(1);
-  const [setScores, setSetScores] = useState([]);
-  const [filterByTeam, setFilterByTeam] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortCriteria, setSortCriteria] = useState("date");
-  const [filteredMatchHistory, setFilteredMatchHistory] = useState([]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const groupsResponse = await fetch(
-          `${config.backendUrl}/groups/${managerId}`
-        );
-        const teamsResponse = await fetch(
-          `${config.backendUrl}/teams/${managerId}`
-        );
-        const matchHistoryResponse = await fetch(
-          `${config.backendUrl}/matchHistory/${managerId}`
-        );
-
-        const groupsData = await groupsResponse.json();
-        const teamsData = await teamsResponse.json();
-        const matchHistoryData = await matchHistoryResponse.json();
-
-        setGroups(groupsData);
-        setTeams(teamsData);
-        setMatchHistory(matchHistoryData);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
-
-  useEffect(() => {
-    let filteredData = matchHistory;
-
-    // Filter by team
-    if (filterByTeam) {
-      filteredData = filteredData.filter(
-        (match) => match.teamA === filterByTeam || match.teamB === filterByTeam
-      );
-    }
-
-    // Filter by search query
-    if (searchQuery) {
-      filteredData = filteredData.filter((match) =>
-        `${match.teamA} vs ${match.teamB}`
-          .toLowerCase()
-          .includes(searchQuery.toLowerCase())
-      );
-    }
-
-    setFilteredMatchHistory(filteredData);
-  }, [matchHistory, searchQuery, filterByTeam]);
-
-  // Function to open the match history modal
-  const showMatchHistory = () => {
-    setMatchHistoryVisible(true);
-  };
-
-  // Function to close the match history modal
-  const closeMatchHistoryModal = () => {
-    setMatchHistoryVisible(false);
-  };
-
-  // Handle timer logic
-  useEffect(() => {
-    let interval = null;
-    if (isRunning) {
-      interval = setInterval(() => {
-        setTimer((prev) => prev + 1);
-      }, 1000);
-    } else if (!isRunning && timer !== 0) {
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  }, [isRunning, timer]);
 
   // Initialize round-robin results when teams are loaded
   useEffect(() => {
@@ -192,24 +119,37 @@ const ViewTournament = () => {
       const response = await axios.get(
         `${config.backendUrl}/managers/${managerId}/groups/${groupId}/teams`
       );
-      setTeams(response.data);
-      setSelectedGroupId(groupId);
-      setWinners([]); // Reset winners when new teams are fetched
+
+      if (Array.isArray(response.data)) {
+        const teamsData = response.data;
+        setTeams(teamsData);
+        setSelectedGroupId(groupId);
+
+        // Check for no teams or only one team
+        if (teamsData.length === 0) {
+          Alert.alert("No Teams", "There are no teams in this group.");
+        } else if (teamsData.length === 1) {
+          Alert.alert("Only One Team", "There is only one team in this group.");
+        } else {
+          setWinners([]); // Reset winners if multiple teams exist
+        }
+      } else {
+        throw new Error("Unexpected data format received");
+      }
     } catch (error) {
-      console.error("Error fetching teams:", error);
-      Alert.alert("Error", "Failed to fetch teams");
+      Alert.alert("Error", error.message || "Failed to fetch teams");
     }
   };
 
   const getMatchStatus = (match) => {
     if (match.teamA === "BYE" || match.teamB === "BYE") return "bye";
-    if (match.winner) return "completed";
+    if (match.winner) return "completed"; // Check if winner is assigned
     if (
       selectedMatch?.teamA === match.teamA &&
       selectedMatch?.teamB === match.teamB
     )
       return "inProgress";
-    return "pending";
+    return "pending"; // Match is still pending if no other status applies
   };
 
   const generateBrackets = () => {
@@ -272,32 +212,6 @@ const ViewTournament = () => {
     setBrackets([schedule]);
   };
 
-  const generateExpeditionBracket = () => {
-    // Split teams into groups for round robin
-    const groupSize = 4;
-    const groups = [];
-    for (let i = 0; i < teams.length; i += groupSize) {
-      groups.push(teams.slice(i, i + groupSize));
-    }
-
-    // Generate round robin schedules for each group
-    const groupSchedules = groups.map((group) => {
-      const schedule = [];
-      for (let i = 0; i < group.length; i++) {
-        for (let j = i + 1; j < group.length; j++) {
-          schedule.push({
-            teamA: group[i].name,
-            teamB: group[j].name,
-            winner: null,
-          });
-        }
-      }
-      return schedule;
-    });
-
-    setBrackets(groupSchedules);
-  };
-
   useEffect(() => {
     if (teams.length > 0) {
       generateBrackets();
@@ -335,7 +249,11 @@ const ViewTournament = () => {
                 {round.map((match, matchIndex) => {
                   const yPos =
                     (svgHeight / (round.length + 1)) * (matchIndex + 1);
-                  const matchStatus = getMatchStatus(match); // This should work now
+                  const matchStatus = getMatchStatus(match); // Check if this returns the expected status
+                  console.log(
+                    `Match Status for ${match.teamA} vs ${match.teamB}:`,
+                    matchStatus
+                  ); // Debug log
 
                   return (
                     <G key={`match-${roundIndex}-${matchIndex}`}>
@@ -467,9 +385,15 @@ const ViewTournament = () => {
 
                   const cellFill = match
                     ? match.winner === teamA.name
-                      ? "#d1e7dd"
-                      : "#f8d7da"
-                    : "#ffffff";
+                      ? "#d1e7dd" // Winner cell color
+                      : "#f8d7da" // Loser cell color
+                    : "#ffffff"; // Default color for unplayed matches
+
+                  console.log(
+                    `Match Result: ${teamA.name} vs ${teamB.name}, Winner: ${
+                      match ? match.winner : "N/A"
+                    }`
+                  ); // Debug log
 
                   return (
                     <G key={`cell-${rowIndex}-${colIndex}`}>
@@ -503,128 +427,208 @@ const ViewTournament = () => {
     );
   };
 
-  // Expedition Bracket (Combination of Round Robin + Single Elimination)
-  const renderExpeditionBracket = () => {
-    return (
-      <View>
-        <Text style={styles.bracketTitle}>Group Stage (Round Robin)</Text>
-        {renderRoundRobinBracket()}
-        <Text style={styles.bracketTitle}>Knockout Stage</Text>
-        {renderSingleEliminationBracket()}
-      </View>
-    );
-  };
-
   const selectMatch = (teamA, teamB) => {
     setSelectedMatch({ teamA, teamB });
   };
 
   const handleMatchStart = () => {
     if (selectedMatch) {
-      resetScores();
-      setModalVisible(true);
+      // Log tournament configurations
+      console.log("Tournament Type:", tournamentType);
+      console.log("Match Type:", matchType);
+      console.log("Number of Sets:", numOfSets);
+
+      resetScores(); // Reset scores to zero
+      setCurrentMatch(0); // Reset current match to 0
+      setMatchWinner(null); // Reset match winner
+      setSetHistory([]); // Reset set history when starting a new match
+      setModalVisible(true); // Open the modal
     } else {
       Alert.alert("No Match Selected", "Please select a match first.");
     }
   };
 
-  // Handle ending a match within a team format
   const handleMatchEnd = () => {
-    if (matchType === "Team" && currentMatch < 5) {
-      // Progress to the next match in a team format
-      setCurrentMatch((prev) => prev + 1);
-      setMatchHistory((prev) => [
-        ...prev,
-        { matchNumber: currentMatch, winner: matchWinner },
-      ]);
-      resetMatch(); // Resets for the next match
-    } else if (matchType === "Team" && currentMatch === 5) {
-      // End the team match after 5 matches
-      Alert.alert("Team Match Over", "Team match has concluded.");
-      closeMatchModal(); // Close the modal after the team match concludes
-    } else {
-      // For singles, handle the end of the match
-      if (setScoreA.length >= Math.ceil(numOfSets / 2)) {
-        setMatchWinner("A");
-        Alert.alert("Match Over", `${selectedMatch?.teamA} wins the match!`);
-      } else if (setScoreB.length >= Math.ceil(numOfSets / 2)) {
-        setMatchWinner("B");
-        Alert.alert("Match Over", `${selectedMatch?.teamB} wins the match!`);
-      }
+    if (!selectedMatch) {
+      Alert.alert("Error", "No match selected.");
+      return;
     }
+
+    console.log("Ending Match...");
+    console.log("Tournament Type:", tournamentType);
+    console.log("Match Type:", matchType);
+    console.log("Number of Sets:", numOfSets);
+
+    // Determine who won the match based on sets won
+    if (setsWonByTeamA > setsWonByTeamB) {
+      Alert.alert("Match Over", `${selectedMatch.teamA} wins the match!`);
+      updateBrackets(selectedMatch.teamA); // Update brackets for winner
+    } else if (setsWonByTeamB > setsWonByTeamA) {
+      Alert.alert("Match Over", `${selectedMatch.teamB} wins the match!`);
+      updateBrackets(selectedMatch.teamB); // Update brackets for winner
+    } else {
+      Alert.alert(
+        "Match Still Ongoing",
+        "The match has not yet been concluded."
+      );
+      return; // Exit if match is still ongoing
+    }
+
+    // Add match result to history
+    setMatchHistory((prev) => [
+      ...prev,
+      {
+        matchNumber: currentMatch + 1,
+        winner:
+          setsWonByTeamA > setsWonByTeamB
+            ? selectedMatch.teamA
+            : selectedMatch.teamB,
+        scores: { scoreA: scoreTeamA, scoreB: scoreTeamB },
+      },
+    ]);
+
+    // Handle tournament type logic after determining match outcome
+    if (tournamentType === "Single Elimination") {
+      updateBrackets(
+        setsWonByTeamA > setsWonByTeamB
+          ? selectedMatch.teamA
+          : selectedMatch.teamB
+      );
+      Alert.alert("Next Round", "Proceed to the next round of the tournament.");
+    } else if (tournamentType === "Round Robin") {
+      if (setsWonByTeamA > setsWonByTeamB) {
+        setTeamsAWins((prev) => prev + 1);
+      } else if (setsWonByTeamB > setsWonByTeamA) {
+        setTeamsBWins((prev) => prev + 1);
+      }
+      Alert.alert("Match Recorded", "Scores updated for Round Robin.");
+    } else if (tournamentType === "Expedition") {
+      Alert.alert("Expedition Match", "Match concluded in expedition format.");
+    }
+
+    // Reset match state for the next round
+    resetMatch();
+    setSelectedMatch(null); // Reset selectedMatch to prevent accessing undefined
+    closeMatchModal(); // Close the modal after handling end of match
   };
+
+  const updateBrackets = (winner) => {
+    const updatedBrackets = brackets.map((round) => {
+      return round.map((match) => {
+        // Update match based on team names instead of id
+        if (
+          (match.teamA === selectedMatch.teamA &&
+            match.teamB === selectedMatch.teamB) ||
+          (match.teamA === selectedMatch.teamB &&
+            match.teamB === selectedMatch.teamA)
+        ) {
+          return { ...match, winner };
+        }
+        return match;
+      });
+    });
+    setBrackets(updatedBrackets); // Update state with the new bracket
+    console.log("Brackets updated:", updatedBrackets);
+  };
+
+  // In your modal, use `selectedMatch` state to display match info correctly
+  useEffect(() => {
+    if (selectedMatch) {
+      // Here you could check and update the match details if needed
+      console.log("Selected Match updated:", selectedMatch);
+    }
+  }, [selectedMatch]);
 
   const resetScores = () => {
     setScoreTeamA(0);
     setScoreTeamB(0);
   };
 
-  const handleScoreUpdate = (team) => {
-    if (team === "A") {
-      setScoreTeamA((prev) => prev + 1);
-      if (scoreTeamA >= 10 && scoreTeamA - scoreTeamB >= 2) {
-        handleSetWin("A");
-      }
-    } else if (team === "B") {
-      setScoreTeamB((prev) => prev + 1);
-      if (scoreTeamB >= 10 && scoreTeamB - scoreTeamA >= 2) {
-        handleSetWin("B");
-      }
-    }
-  };
-
-  const handleSetWin = (winningTeam) => {
-    if (winningTeam === "A") {
-      setSetScoreA((prev) => [...prev, scoreTeamA]);
-    } else {
-      setSetScoreB((prev) => [...prev, scoreTeamB]);
-    }
-    resetScores(); // Reset scores for the next set
-    setSetCount((prev) => Math.min(prev + 1, numOfSets)); // Limit to max of selected sets
-    checkMatchEnd();
-    Alert.alert(
-      "Set Ended",
-      `${
-        winningTeam === "A" ? selectedMatch.teamA : selectedMatch.teamB
-      } wins the set!`
-    );
-  };
-
-  // Handle end of set
   const handleSetEnd = () => {
-    // Check if one team has won the set
-    if (scoreTeamA >= 11 && scoreTeamA - scoreTeamB >= 2) {
-      setSetScoreA((prev) => [...prev, 1]); // Record a set win for Team A
-      setSetHistory((prev) => [
-        ...prev,
-        { set: currentSet, scoreA: scoreTeamA, scoreB: scoreTeamB },
-      ]);
-      resetScores(); // Reset team scores for the next set
-      setCurrentSet((prev) => prev + 1); // Move to the next set
-    } else if (scoreTeamB >= 11 && scoreTeamB - scoreTeamA >= 2) {
-      setSetScoreB((prev) => [...prev, 1]); // Record a set win for Team B
-      setSetHistory((prev) => [
-        ...prev,
-        { set: currentSet, scoreA: scoreTeamA, scoreB: scoreTeamB },
-      ]);
-      resetScores(); // Reset team scores for the next set
-      setCurrentSet((prev) => prev + 1); // Move to the next set
-    } else {
-      Alert.alert(
-        "Error",
-        "Set cannot end yet. Ensure a player has at least 11 points and a 2-point lead."
-      );
-      return; // Exit the function if set cannot end
+    const winningScore = 11; // Score needed to win a set
+    const scoreDifference = Math.abs(scoreTeamA - scoreTeamB); // Difference in scores
+    let winningTeam;
+    let losingTeam;
+
+    // Ensure selectedMatch is defined
+    if (!selectedMatch) {
+      Alert.alert("Error", "No match selected.");
+      return;
     }
 
-    // Check if the match is over
-    if (setScoreA.length >= Math.ceil(numOfSets / 2)) {
-      setMatchWinner("A");
-      Alert.alert("Match Over", `${selectedMatch?.teamA} wins the match!`);
-    } else if (setScoreB.length >= Math.ceil(numOfSets / 2)) {
-      setMatchWinner("B");
-      Alert.alert("Match Over", `${selectedMatch?.teamB} wins the match!`);
+    // Alert current scores
+    Alert.alert(
+      "Current Scores",
+      `${selectedMatch.teamA}: ${scoreTeamA}, ${selectedMatch.teamB}: ${scoreTeamB}`
+    );
+
+    // Check if either team has won the set
+    if (scoreTeamA >= winningScore && scoreDifference >= 2) {
+      winningTeam = selectedMatch.teamA;
+      losingTeam = selectedMatch.teamB;
+      setSetsWonByTeamA((prev) => prev + 1); // Increment Team A's sets won
+    } else if (scoreTeamB >= winningScore && scoreDifference >= 2) {
+      winningTeam = selectedMatch.teamB;
+      losingTeam = selectedMatch.teamA;
+      setSetsWonByTeamB((prev) => prev + 1); // Increment Team B's sets won
+    } else {
+      // Conditions not met, alert the user
+      Alert.alert(
+        "Set Still Ongoing",
+        "A team must have at least 11 points and lead by 2 points to end the set."
+      );
+      return; // Exit if conditions are not met
     }
+
+    // Update set history
+    setSetHistory((prev) => [
+      ...prev,
+      { scoreA: scoreTeamA, scoreB: scoreTeamB, winningTeam, losingTeam },
+    ]);
+
+    Alert.alert("Set Over", `${winningTeam} wins the set!`);
+
+    // Reset the scores for the next set
+    resetScores();
+
+    // Log set details
+    console.log(
+      `Set ${setSetHistory.length}: ${selectedMatch.teamA} - ${scoreTeamA}, ${selectedMatch.teamB} - ${scoreTeamB}, Winner: ${winningTeam}, Loser: ${losingTeam}`
+    );
+
+    // Check if match should end after the set
+    const setsNeededToWin = Math.ceil(numOfSets / 2);
+    if (
+      (matchType === "Team" && setsWonByTeamA >= setsNeededToWin) ||
+      (matchType === "Singles" && setsWonByTeamA >= setsNeededToWin) ||
+      (matchType === "Doubles" && setsWonByTeamB >= setsNeededToWin)
+    ) {
+      handleMatchEnd(); // Call the match end logic
+    }
+  };
+
+  // Function to render each match history item for table tennis
+  const renderMatchHistoryItem = ({ item }) => {
+    return (
+      <View style={styles.historyItem}>
+        <Text style={styles.historyText}>
+          {item.teamA} vs {item.teamB} - Winner: {item.winner}
+        </Text>
+        <Text style={styles.historyText}>
+          Sets:
+          {item.setHistory.map((set, index) => (
+            <Text key={index}>
+              {` Set ${index + 1}: ${set.scoreA} - ${set.scoreB}${
+                index < item.setHistory.length - 1 ? ", " : ""
+              }`}
+            </Text>
+          ))}
+        </Text>
+        <Text style={styles.historyText}>
+          Total Score: {item.scores.scoreA} - {item.scores.scoreB}
+        </Text>
+      </View>
+    );
   };
 
   // Function to add points to Team A
@@ -658,219 +662,18 @@ const ViewTournament = () => {
     setCurrentSet(1);
     setMatchWinner(null);
     setSetHistory([]);
-    setTimer(0);
-    setIsRunning(false);
   };
 
   const closeMatchModal = () => {
     setModalVisible(false);
   };
 
-  // Add tournament progress indicators to the UI
-  const renderTournamentProgress = () => (
-    <View style={styles.progressContainer}>
-      <Text style={styles.progressText}>
-        Round: {currentRound} - Match: {currentMatch}
-      </Text>
-      {tournamentType === "Round Robin" && (
-        <TouchableOpacity
-          style={styles.standingsButton}
-          onPress={() => displayTournamentResults(calculateFinalStandings())}
-        >
-          <Text style={styles.standingsButtonText}>View Current Standings</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-
-  const checkMatchEnd = () => {
-    const totalSetsA = setScoreA.length; // Use the renamed variable
-    const totalSetsB = setScoreB.length; // Use the renamed variable
-
-    if (totalSetsA >= Math.ceil(numOfSets / 2)) {
-      Alert.alert("Match Over", `${selectedMatch.teamA} wins the match!`);
-      closeMatchModal();
-    } else if (totalSetsB >= Math.ceil(numOfSets / 2)) {
-      Alert.alert("Match Over", `${selectedMatch.teamB} wins the match!`);
-      closeMatchModal();
-    }
-  };
-
-  const handleMatchCompletion = (winningTeam, losingTeam) => {
-    if (tournamentType === "Round Robin") {
-      updateRoundRobinResults(winningTeam, losingTeam);
-    } else if (tournamentType === "Single Elimination") {
-      handleSingleEliminationProgress(winningTeam);
-    }
-
-    // Add winner to the winners array (store as a string)
-    setWinners((prev) => {
-      const updatedWinners = [...prev, winningTeam.name]; // Store only the name
-      console.log("Updated Winners Array:", updatedWinners);
-      return updatedWinners;
-    });
-
-    // Add to match history
-    setMatchHistory((prev) => {
-      const newMatchHistory = [
-        ...prev,
-        {
-          teamA: selectedMatch.teamA,
-          teamB: selectedMatch.teamB,
-          sets: [
-            // Initialize sets as an array
-            {
-              scoreA: scoreTeamA,
-              scoreB: scoreTeamB,
-              winner: winningTeam.name,
-            },
-          ],
-        },
-      ];
-      console.log("Updated Match History:", newMatchHistory);
-      return newMatchHistory;
-    });
-
-    // Progress to next match
-    setCurrentMatch((prev) => prev + 1);
-
-    // Check if current round is complete
-    checkRoundCompletion();
-  };
-
-  const updateRoundRobinResults = (winner, loser) => {
-    setRoundRobinResults((prev) => {
-      const updated = { ...prev };
-      // Update winner's stats
-      updated[winner._id] = {
-        ...updated[winner._id],
-        wins: updated[winner._id].wins + 1,
-        points: updated[winner._id].points + 2,
-        matches: [
-          ...updated[winner._id].matches,
-          {
-            opponent: loser._id,
-            result: "win",
-          },
-        ],
-      };
-      // Update loser's stats
-      updated[loser._id] = {
-        ...updated[loser._id],
-        losses: updated[loser._id].losses + 1,
-        points: updated[loser._id].points + 1,
-        matches: [
-          ...updated[loser._id].matches,
-          {
-            opponent: winner._id,
-            result: "loss",
-          },
-        ],
-      };
-      return updated;
-    });
-  };
-
-  const handleSingleEliminationProgress = (winner) => {
-    const updatedBrackets = [...brackets];
-    const currentRoundMatches = updatedBrackets[currentRound - 1];
-
-    // Find the index of the current match in the round
-    const matchIndex = currentRoundMatches.findIndex(
-      (match) =>
-        match.teamA === selectedMatch.teamA &&
-        match.teamB === selectedMatch.teamB
-    );
-
-    // Update the winner in the current match
-    currentRoundMatches[matchIndex].winner = winner.name;
-
-    // If there's a next round, update the advancing team
-    if (currentRound < updatedBrackets.length) {
-      const nextRoundIndex = Math.floor(matchIndex / 2);
-      const isFirstTeam = matchIndex % 2 === 0;
-      const nextRoundMatch = updatedBrackets[currentRound][nextRoundIndex];
-
-      // Assign the winning team to the correct slot in the next round
-      if (isFirstTeam) {
-        nextRoundMatch.teamA = winner.name;
-      } else {
-        nextRoundMatch.teamB = winner.name;
-      }
-    }
-
-    setBrackets(updatedBrackets); // Update the state with the modified brackets
-  };
-
-  const checkRoundCompletion = () => {
-    const matchesPerRound =
-      tournamentType === "Round Robin"
-        ? (teams.length * (teams.length - 1)) / 2
-        : Math.floor(teams.length / Math.pow(2, currentRound - 1));
-
-    if (currentMatch > matchesPerRound) {
-      setCurrentRound((prev) => prev + 1);
-      setCurrentMatch(1);
-
-      if (tournamentType === "Round Robin") {
-        checkTournamentCompletion();
-      }
-    }
-  };
-
-  const checkTournamentCompletion = () => {
-    if (tournamentType === "Round Robin") {
-      const totalMatches = (teams.length * (teams.length - 1)) / 2;
-      const completedMatches =
-        Object.values(roundRobinResults).reduce(
-          (sum, team) => sum + team.matches.length,
-          0
-        ) / 2;
-
-      if (completedMatches >= totalMatches) {
-        const standings = calculateFinalStandings();
-        displayTournamentResults(standings);
-      }
-    }
-  };
-
-  const calculateFinalStandings = () => {
-    return Object.entries(roundRobinResults)
-      .map(([teamId, stats]) => ({
-        teamId,
-        team: teams.find((t) => t._id === teamId),
-        ...stats,
-      }))
-      .sort((a, b) => b.points - a.points);
-  };
-
-  const displayTournamentResults = (standings) => {
-    Alert.alert(
-      "Tournament Complete",
-      `Final Standings:\n${standings
-        .map(
-          (s, i) =>
-            `${i + 1}. ${s.team.name} - ${s.points} points (${s.wins}W/${
-              s.losses
-            }L)`
-        )
-        .join("\n")}`,
-      [{ text: "OK" }]
-    );
-  };
-
-  // const renderWinners = () => {
-  //   return winners.map((winner, index) => (
-  //     <Text key={index} style={styles.winnerText}>
-  //       {winner}
-  //     </Text>
-  //   ));
-  // };
-
   const renderGroup = ({ item }) => (
     <TouchableOpacity
       style={styles.groupContainer}
-      onPress={() => fetchTeams(item._id)}
+      onPress={() => fetchTeams(item._id)} // Fetch teams when a group is pressed
+      accessibilityLabel={`Select group ${item.name}`} // Accessibility improvement
+      accessibilityHint="Double tap to view teams in this group."
     >
       <Text style={styles.groupText}>{item.name}</Text>
     </TouchableOpacity>
@@ -903,8 +706,6 @@ const ViewTournament = () => {
         return renderSingleEliminationBracket();
       case "Round Robin":
         return renderRoundRobinBracket();
-      case "Expedition":
-        return renderExpeditionBracket();
       default:
         return renderSingleEliminationBracket();
     }
@@ -927,6 +728,7 @@ const ViewTournament = () => {
               <View style={styles.tournamentConfigSection}>
                 <Text style={styles.title}>Tournament Configuration</Text>
 
+                {/* Tournament Type Selector */}
                 <View style={styles.pickerContainer}>
                   <Text style={styles.pickerLabel}>Tournament Type:</Text>
                   <RNPickerSelect
@@ -945,6 +747,7 @@ const ViewTournament = () => {
                   />
                 </View>
 
+                {/* Match Type Selector */}
                 <View style={styles.pickerContainer}>
                   <Text style={styles.pickerLabel}>Match Type:</Text>
                   <RNPickerSelect
@@ -963,41 +766,73 @@ const ViewTournament = () => {
                   />
                 </View>
 
-                <View style={styles.bracketContainer}>
-                  <Text style={styles.title}>Tournament Bracket</Text>
-                  {renderBracket()}
+                {/* Number of Sets Selector */}
+                <View style={styles.pickerContainer}>
+                  <Text style={styles.pickerLabel}>Number of Sets:</Text>
+                  <RNPickerSelect
+                    onValueChange={(value) => setNumOfSets(value)}
+                    items={[
+                      { label: "Best of 3 Sets", value: 3 },
+                      { label: "Best of 5 Sets", value: 5 },
+                      { label: "Best of 7 Sets", value: 7 },
+                    ]}
+                    value={numOfSets}
+                    style={pickerSelectStyles}
+                    placeholder={{
+                      label: "Select number of sets",
+                      value: null,
+                    }}
+                  />
                 </View>
 
+                {/* Tournament Bracket */}
+                <View style={styles.bracketContainer}>
+                  <Text style={styles.title}>Tournament Bracket</Text>
+                  {tournamentType && matchType && renderBracket()}
+                </View>
+
+                {/* Current Matchups Section */}
                 <View style={styles.matchupsSection}>
                   <Text style={styles.title}>Current Matchups:</Text>
                   <FlatList
                     data={brackets[0]} // Get the first round of matches dynamically
-                    renderItem={({ item }) => renderMatchup(item)} // Pass the entire match object
-                    keyExtractor={(item) => `${item.teamA}-${item.teamB}`} // Use team names as key
+                    renderItem={({ item }) => (
+                      <View style={styles.matchupContainer}>
+                        {renderMatchup(item)}
+                        <TouchableOpacity
+                          style={styles.startButton}
+                          onPress={() => {
+                            setSelectedMatch({
+                              ...item,
+                              tournamentType, // Include tournament type
+                              matchType, // Include match type
+                            });
+                            handleMatchStart(); // Start the match
+                          }}
+                        >
+                          <Text style={styles.startButtonText}>
+                            Start Match
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                    keyExtractor={(item) => `${item.teamA}-${item.teamB}`} // Ensure keys are unique
                     contentContainerStyle={styles.matchupList}
                     showsVerticalScrollIndicator={false}
                   />
-                  <TouchableOpacity
-                    style={styles.startButton}
-                    onPress={handleMatchStart}
-                  >
-                    <Text style={styles.startButtonText}>Start Match</Text>
-                  </TouchableOpacity>
                 </View>
 
+                {/* Match History Section */}
                 <View style={styles.matchHistorySection}>
                   <Text style={styles.title}>Match History:</Text>
                   <FlatList
-                    data={matchHistory} // Replace with your match history data
-                    renderItem={({ item }) => renderMatchHistoryItem(item)} // Pass the match history item
-                    keyExtractor={(item) => `match-${item.game}`} // Use game number as key
+                    data={matchHistory}
+                    renderItem={({ item }) => renderMatchHistoryItem(item)}
+                    keyExtractor={(item) => `match-${item.game}`} // Ensure keys are unique
                     contentContainerStyle={styles.historyList}
                     showsVerticalScrollIndicator={false}
                   />
-                  <TouchableOpacity
-                    style={styles.showHistoryButton}
-                    onPress={showMatchHistory} // Function to show match history modal
-                  >
+                  <TouchableOpacity style={styles.showHistoryButton}>
                     <Text style={styles.showHistoryButtonText}>
                       Show Match History
                     </Text>
@@ -1017,28 +852,39 @@ const ViewTournament = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            {console.log("Modal opened")}
+
             {/* Match Header */}
             <View style={styles.matchHeader}>
               <Text style={styles.modalTitle}>
                 <Icon name="trophy" size={24} color="#007AFF" />
-                {` ${selectedMatch?.teamA} vs ${selectedMatch?.teamB}`}
+                {` ${selectedMatch?.teamA || "Team A"} vs ${
+                  selectedMatch?.teamB || "Team B"
+                }`}
               </Text>
+              {console.log(
+                `Match Header: ${selectedMatch?.teamA || "Team A"} vs ${
+                  selectedMatch?.teamB || "Team B"
+                }`
+              )}
             </View>
 
-            {/* Sets Configuration */}
-            <View style={styles.setsConfig}>
-              <Text style={styles.sectionTitle}>Match Configuration</Text>
-              <RNPickerSelect
-                onValueChange={(value) => setNumOfSets(value)}
-                items={[
-                  { label: "Best of 3 Sets", value: 3 },
-                  { label: "Best of 5 Sets", value: 5 },
-                  { label: "Best of 7 Sets", value: 7 },
-                ]}
-                value={numOfSets}
-                style={pickerSelectStyles}
-                placeholder={{ label: "Select number of sets", value: null }}
-              />
+            {/* Tournament Information */}
+            <View style={styles.tournamentInfo}>
+              <Text style={styles.tournamentInfoText}>
+                {`Tournament Type: ${tournamentType || "N/A"}`}
+              </Text>
+              <Text style={styles.tournamentInfoText}>
+                {`Match Type: ${matchType || "N/A"}`}
+              </Text>
+              <Text style={styles.tournamentInfoText}>
+                {`Number of Sets: ${numOfSets || "N/A"}`}
+              </Text>
+              {console.log(
+                `Tournament Type: ${tournamentType || "N/A"}, Match Type: ${
+                  matchType || "N/A"
+                }, Number of Sets: ${numOfSets || "N/A"}`
+              )}
             </View>
 
             {/* Scoreboard */}
@@ -1054,7 +900,9 @@ const ViewTournament = () => {
 
               {/* Team A Row */}
               <View style={styles.scoreboardRow}>
-                <Text style={styles.teamCell}>{selectedMatch?.teamA}</Text>
+                <Text style={styles.teamCell}>
+                  {selectedMatch?.teamA || "Team A"}
+                </Text>
                 <Text style={styles.scoreCell}>{scoreTeamA}</Text>
                 <View style={styles.controlsCell}>
                   <TouchableOpacity
@@ -1070,11 +918,14 @@ const ViewTournament = () => {
                     <Icon name="minus" size={20} color="#dc3545" />
                   </TouchableOpacity>
                 </View>
+                {console.log(`Team A Score: ${scoreTeamA}`)}
               </View>
 
               {/* Team B Row */}
               <View style={styles.scoreboardRow}>
-                <Text style={styles.teamCell}>{selectedMatch?.teamB}</Text>
+                <Text style={styles.teamCell}>
+                  {selectedMatch?.teamB || "Team B"}
+                </Text>
                 <Text style={styles.scoreCell}>{scoreTeamB}</Text>
                 <View style={styles.controlsCell}>
                   <TouchableOpacity
@@ -1090,74 +941,26 @@ const ViewTournament = () => {
                     <Icon name="minus" size={20} color="#dc3545" />
                   </TouchableOpacity>
                 </View>
+                {console.log(`Team B Score: ${scoreTeamB}`)}
               </View>
             </View>
 
-            {/* Sets History */}
-            <View style={styles.setsHistory}>
-              <Text style={styles.sectionTitle}>Sets History</Text>
-              {setHistory.length > 0 ? (
-                <View style={styles.historyTable}>
-                  <View style={styles.historyHeaderRow}>
-                    <Text style={styles.historyHeaderCell}>Set</Text>
-                    <Text style={styles.historyHeaderCell}>
-                      {selectedMatch?.teamA}
-                    </Text>
-                    <Text style={styles.historyHeaderCell}>
-                      {selectedMatch?.teamB}
-                    </Text>
-                  </View>
-                  {setHistory.map((set, index) => (
-                    <View key={index} style={styles.historyRow}>
-                      <Text style={styles.historyCell}>Set {set.set}</Text>
-                      <Text style={styles.historyCell}>{set.scoreA}</Text>
-                      <Text style={styles.historyCell}>{set.scoreB}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : (
-                <Text style={styles.noHistoryText}>No sets completed yet</Text>
-              )}
-            </View>
-
-            {/* Match Controls */}
-            <View style={styles.matchControls}>
-              <TouchableOpacity
-                style={[styles.controlButton, styles.endSetButton]}
-                onPress={handleSetEnd}
-              >
-                <Icon name="flag-checkered" size={16} color="#fff" />
+            {/* Set and Match Controls */}
+            <View style={styles.controlsContainer}>
+              <TouchableOpacity style={styles.button} onPress={handleSetEnd}>
                 <Text style={styles.buttonText}>End Set</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.controlButton, styles.resetButton]}
-                onPress={resetMatch}
-              >
-                <Icon name="refresh" size={16} color="#fff" />
-                <Text style={styles.buttonText}>Reset</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.controlButton, styles.closeButton]}
-                onPress={closeMatchModal}
-              >
-                <Icon name="times" size={16} color="#fff" />
-                <Text style={styles.buttonText}>Close</Text>
+              <TouchableOpacity style={styles.button} onPress={handleMatchEnd}>
+                <Text style={styles.buttonText}>End Match</Text>
               </TouchableOpacity>
             </View>
 
-            {matchWinner && (
-              <View style={styles.winnerBanner}>
-                <Icon name="trophy" size={24} color="#FFD700" />
-                <Text style={styles.winnerText}>
-                  Winner:{" "}
-                  {matchWinner === "A"
-                    ? selectedMatch?.teamA
-                    : selectedMatch?.teamB}
-                </Text>
-              </View>
-            )}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={closeMatchModal}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1166,7 +969,6 @@ const ViewTournament = () => {
         animationType="slide"
         transparent={true}
         visible={isMatchHistoryVisible}
-        onRequestClose={closeMatchHistoryModal}
       >
         <View style={matchHistoryStyles.modalOverlay}>
           <View style={matchHistoryStyles.modalContent}>
@@ -1181,10 +983,7 @@ const ViewTournament = () => {
             />
 
             {/* Close Button */}
-            <TouchableOpacity
-              style={matchHistoryStyles.closeButton}
-              onPress={closeMatchHistoryModal}
-            >
+            <TouchableOpacity style={matchHistoryStyles.closeButton}>
               <Text style={matchHistoryStyles.closeButtonText}>Close</Text>
             </TouchableOpacity>
           </View>
@@ -1397,6 +1196,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
+  buttonHover: {
+    opacity: 0.8, // Slightly transparent on hover
+  },
+  buttonActive: {
+    transform: [{ scale: 0.95 }], // Slightly scale down on press
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -1407,9 +1212,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     margin: 16,
-    elevation: 4,
+    elevation: 8, // Increased shadow for a floating effect
     maxHeight: "80%",
     position: "relative",
+    shadowColor: "#000", // iOS shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   modalHeader: {
     flexDirection: "row",
@@ -1496,12 +1305,38 @@ const styles = StyleSheet.create({
     borderColor: "#dee2e6",
     marginHorizontal: 4,
   },
+  tournamentInfo: {
+    marginVertical: 10,
+    padding: 10,
+    backgroundColor: "#f8f8f8", // Background color for better visibility
+    borderRadius: 5,
+    borderColor: "#ccc",
+    borderWidth: 1,
+  },
+  tournamentInfoText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
   setsHistory: {
     marginTop: 20,
-    padding: 10,
+    padding: 12,
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 5,
+    borderColor: "#007bff", // Consistent border color
+    borderRadius: 8,
+    backgroundColor: "#f9f9f9", // Slightly off-white for sets history
+  },
+  winnerText: {
+    fontSize: 22,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginTop: 24,
+    color: "#155724", // Dark green for winner text
+    padding: 16,
+    backgroundColor: "#d4edda", // Light green background
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#c3e6cb", // Light green border
   },
   sectionTitle: {
     fontSize: 18,
@@ -1536,7 +1371,7 @@ const styles = StyleSheet.create({
     padding: 10,
     textAlign: "center",
   },
-  noHistoryText: {
+  historyText: {
     textAlign: "center",
     color: "#888",
   },
@@ -1552,33 +1387,33 @@ const styles = StyleSheet.create({
     backgroundColor: "#007bff",
     padding: 12,
     borderRadius: 8,
-    flex: 1,
+    marginVertical: 4,
     alignItems: "center",
-    marginRight: 8,
-    elevation: 2,
+    elevation: 4, // Increased elevation for emphasis
+    transition: "background-color 0.3s ease", // Smooth transition
   },
-  resetButton: {
+  endMatchButton: {
     backgroundColor: "#dc3545",
     padding: 12,
     borderRadius: 8,
-    flex: 1,
+    marginVertical: 4,
     alignItems: "center",
-    marginHorizontal: 8,
-    elevation: 2,
+    elevation: 4, // Increased elevation for emphasis
+    transition: "background-color 0.3s ease", // Smooth transition
   },
   closeButton: {
     backgroundColor: "#6c757d",
     padding: 12,
     borderRadius: 8,
-    flex: 1,
+    marginVertical: 4,
     alignItems: "center",
-    marginLeft: 8,
-    elevation: 2,
+    elevation: 4, // Increased elevation for emphasis
+    transition: "background-color 0.3s ease", // Smooth transition
   },
   buttonText: {
-    color: "#ffffff",
+    color: "#ffffff", // White text for all buttons
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "bold",
   },
   winnerText: {
     fontSize: 20,
@@ -1642,6 +1477,30 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginRight: 8,
+  },
+  setsContainer: {
+    marginTop: 20,
+    paddingHorizontal: 10,
+    alignItems: "center",
+  },
+  setsTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  setRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 10,
+  },
+  setLabel: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  teamPoints: {
+    fontSize: 16,
+    color: "#007AFF",
   },
 });
 
