@@ -247,13 +247,20 @@ const ViewTournament = () => {
                 </SvgText>
 
                 {round.map((match, matchIndex) => {
+                  if (!match || !match.teamA || !match.teamB) {
+                    console.warn(
+                      `Undefined match at round ${roundIndex}, match ${matchIndex}`
+                    );
+                    return null; // Skip rendering for undefined matches
+                  }
+
                   const yPos =
                     (svgHeight / (round.length + 1)) * (matchIndex + 1);
                   const matchStatus = getMatchStatus(match); // Check if this returns the expected status
                   console.log(
                     `Match Status for ${match.teamA} vs ${match.teamB}:`,
                     matchStatus
-                  ); // Debug log
+                  );
 
                   return (
                     <G key={`match-${roundIndex}-${matchIndex}`}>
@@ -454,31 +461,24 @@ const ViewTournament = () => {
       return;
     }
 
-    console.log("Ending Match...");
-    console.log("Tournament Type:", tournamentType);
-    console.log("Match Type:", matchType);
-    console.log("Number of Sets:", numOfSets);
-
-    // Determine who won the match based on sets won
     if (setsWonByTeamA > setsWonByTeamB) {
       Alert.alert("Match Over", `${selectedMatch.teamA} wins the match!`);
-      updateBrackets(selectedMatch.teamA); // Update brackets for winner
+      updateBrackets(selectedMatch.teamA);
     } else if (setsWonByTeamB > setsWonByTeamA) {
       Alert.alert("Match Over", `${selectedMatch.teamB} wins the match!`);
-      updateBrackets(selectedMatch.teamB); // Update brackets for winner
+      updateBrackets(selectedMatch.teamB);
     } else {
       Alert.alert(
         "Match Still Ongoing",
         "The match has not yet been concluded."
       );
-      return; // Exit if match is still ongoing
+      return;
     }
 
-    // Add match result to history
     setMatchHistory((prev) => [
       ...prev,
       {
-        matchNumber: currentMatch + 1,
+        matchNumber: matchHistory.length + 1,
         winner:
           setsWonByTeamA > setsWonByTeamB
             ? selectedMatch.teamA
@@ -487,35 +487,22 @@ const ViewTournament = () => {
       },
     ]);
 
-    // Handle tournament type logic after determining match outcome
     if (tournamentType === "Single Elimination") {
       updateBrackets(
         setsWonByTeamA > setsWonByTeamB
           ? selectedMatch.teamA
           : selectedMatch.teamB
       );
-      Alert.alert("Next Round", "Proceed to the next round of the tournament.");
-    } else if (tournamentType === "Round Robin") {
-      if (setsWonByTeamA > setsWonByTeamB) {
-        setTeamsAWins((prev) => prev + 1);
-      } else if (setsWonByTeamB > setsWonByTeamA) {
-        setTeamsBWins((prev) => prev + 1);
-      }
-      Alert.alert("Match Recorded", "Scores updated for Round Robin.");
-    } else if (tournamentType === "Expedition") {
-      Alert.alert("Expedition Match", "Match concluded in expedition format.");
     }
 
-    // Reset match state for the next round
     resetMatch();
-    setSelectedMatch(null); // Reset selectedMatch to prevent accessing undefined
-    closeMatchModal(); // Close the modal after handling end of match
+    setSelectedMatch(null);
+    closeMatchModal();
   };
 
   const updateBrackets = (winner) => {
     const updatedBrackets = brackets.map((round) => {
       return round.map((match) => {
-        // Update match based on team names instead of id
         if (
           (match.teamA === selectedMatch.teamA &&
             match.teamB === selectedMatch.teamB) ||
@@ -527,7 +514,8 @@ const ViewTournament = () => {
         return match;
       });
     });
-    setBrackets(updatedBrackets); // Update state with the new bracket
+
+    setBrackets(updatedBrackets);
     console.log("Brackets updated:", updatedBrackets);
   };
 
@@ -545,39 +533,30 @@ const ViewTournament = () => {
   };
 
   const handleSetEnd = () => {
-    const winningScore = 11; // Score needed to win a set
-    const scoreDifference = Math.abs(scoreTeamA - scoreTeamB); // Difference in scores
+    const winningScore = 11;
+    const scoreDifference = Math.abs(scoreTeamA - scoreTeamB);
     let winningTeam;
     let losingTeam;
 
-    // Ensure selectedMatch is defined
     if (!selectedMatch) {
       Alert.alert("Error", "No match selected.");
       return;
     }
 
-    // Alert current scores
-    Alert.alert(
-      "Current Scores",
-      `${selectedMatch.teamA}: ${scoreTeamA}, ${selectedMatch.teamB}: ${scoreTeamB}`
-    );
-
-    // Check if either team has won the set
     if (scoreTeamA >= winningScore && scoreDifference >= 2) {
       winningTeam = selectedMatch.teamA;
       losingTeam = selectedMatch.teamB;
-      setSetsWonByTeamA((prev) => prev + 1); // Increment Team A's sets won
+      setSetsWonByTeamA((prev) => prev + 1);
     } else if (scoreTeamB >= winningScore && scoreDifference >= 2) {
       winningTeam = selectedMatch.teamB;
       losingTeam = selectedMatch.teamA;
-      setSetsWonByTeamB((prev) => prev + 1); // Increment Team B's sets won
+      setSetsWonByTeamB((prev) => prev + 1);
     } else {
-      // Conditions not met, alert the user
       Alert.alert(
         "Set Still Ongoing",
         "A team must have at least 11 points and lead by 2 points to end the set."
       );
-      return; // Exit if conditions are not met
+      return;
     }
 
     // Update set history
@@ -588,22 +567,14 @@ const ViewTournament = () => {
 
     Alert.alert("Set Over", `${winningTeam} wins the set!`);
 
-    // Reset the scores for the next set
     resetScores();
 
-    // Log set details
-    console.log(
-      `Set ${setSetHistory.length}: ${selectedMatch.teamA} - ${scoreTeamA}, ${selectedMatch.teamB} - ${scoreTeamB}, Winner: ${winningTeam}, Loser: ${losingTeam}`
-    );
-
-    // Check if match should end after the set
     const setsNeededToWin = Math.ceil(numOfSets / 2);
     if (
-      (matchType === "Team" && setsWonByTeamA >= setsNeededToWin) ||
-      (matchType === "Singles" && setsWonByTeamA >= setsNeededToWin) ||
-      (matchType === "Doubles" && setsWonByTeamB >= setsNeededToWin)
+      setsWonByTeamA >= setsNeededToWin ||
+      setsWonByTeamB >= setsNeededToWin
     ) {
-      handleMatchEnd(); // Call the match end logic
+      handleMatchEnd();
     }
   };
 
@@ -852,8 +823,6 @@ const ViewTournament = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {console.log("Modal opened")}
-
             {/* Match Header */}
             <View style={styles.matchHeader}>
               <Text style={styles.modalTitle}>
@@ -862,11 +831,6 @@ const ViewTournament = () => {
                   selectedMatch?.teamB || "Team B"
                 }`}
               </Text>
-              {console.log(
-                `Match Header: ${selectedMatch?.teamA || "Team A"} vs ${
-                  selectedMatch?.teamB || "Team B"
-                }`
-              )}
             </View>
 
             {/* Tournament Information */}
@@ -880,11 +844,6 @@ const ViewTournament = () => {
               <Text style={styles.tournamentInfoText}>
                 {`Number of Sets: ${numOfSets || "N/A"}`}
               </Text>
-              {console.log(
-                `Tournament Type: ${tournamentType || "N/A"}, Match Type: ${
-                  matchType || "N/A"
-                }, Number of Sets: ${numOfSets || "N/A"}`
-              )}
             </View>
 
             {/* Scoreboard */}
@@ -918,7 +877,6 @@ const ViewTournament = () => {
                     <Icon name="minus" size={20} color="#dc3545" />
                   </TouchableOpacity>
                 </View>
-                {console.log(`Team A Score: ${scoreTeamA}`)}
               </View>
 
               {/* Team B Row */}
@@ -941,7 +899,6 @@ const ViewTournament = () => {
                     <Icon name="minus" size={20} color="#dc3545" />
                   </TouchableOpacity>
                 </View>
-                {console.log(`Team B Score: ${scoreTeamB}`)}
               </View>
             </View>
 
@@ -950,8 +907,20 @@ const ViewTournament = () => {
               <TouchableOpacity style={styles.button} onPress={handleSetEnd}>
                 <Text style={styles.buttonText}>End Set</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.button} onPress={handleMatchEnd}>
-                <Text style={styles.buttonText}>End Match</Text>
+
+              {/* Show End Match button only when conditions are met */}
+              {(setsWonByTeamA >= Math.ceil(numOfSets / 2) ||
+                setsWonByTeamB >= Math.ceil(numOfSets / 2)) && (
+                <TouchableOpacity
+                  style={styles.button}
+                  onPress={handleMatchEnd}
+                >
+                  <Text style={styles.buttonText}>End Match</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity style={styles.button} onPress={resetMatch}>
+                <Text style={styles.buttonText}>Reset</Text>
               </TouchableOpacity>
             </View>
 
@@ -1410,8 +1379,31 @@ const styles = StyleSheet.create({
     elevation: 4, // Increased elevation for emphasis
     transition: "background-color 0.3s ease", // Smooth transition
   },
+  button: {
+    backgroundColor: "#007AFF", // Blue background for buttons
+    paddingVertical: 12, // Padding for height
+    paddingHorizontal: 24, // Padding for width
+    borderRadius: 8, // Rounded corners
+    alignItems: "center", // Center text horizontally
+    marginVertical: 10, // Space between buttons vertically
+    elevation: 3, // Add slight shadow for a button effect
+  },
   buttonText: {
     color: "#ffffff", // White text for all buttons
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  closeButton: {
+    backgroundColor: "#dc3545", // Red background for the close button
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    marginVertical: 10,
+    elevation: 3,
+  },
+  closeButtonText: {
+    color: "#ffffff", // White text for the close button
     fontSize: 16,
     fontWeight: "bold",
   },
